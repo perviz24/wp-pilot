@@ -216,9 +216,11 @@ export default function SiteDetailPage() {
               Audit Log
             </Link>
           </Button>
-          <Button variant="outline" className="justify-start" disabled={!site.wpRestConnected}>
-            <Puzzle className="mr-2 h-4 w-4" />
-            Discover APIs
+          <Button variant="outline" className="justify-start" disabled={!site.wpRestConnected} asChild>
+            <Link href={`/dashboard/site/${siteId}/apis`}>
+              <Puzzle className="mr-2 h-4 w-4" />
+              Discover APIs
+            </Link>
           </Button>
         </CardContent>
       </Card>

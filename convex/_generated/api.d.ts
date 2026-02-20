@@ -10,6 +10,7 @@
 
 import type * as auditLogs from "../auditLogs.js";
 import type * as backups from "../backups.js";
+import type * as discovery from "../discovery.js";
 import type * as files from "../files.js";
 import type * as sites from "../sites.js";
 
@@ -22,6 +23,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   auditLogs: typeof auditLogs;
   backups: typeof backups;
+  discovery: typeof discovery;
   files: typeof files;
   sites: typeof sites;
 }>;
