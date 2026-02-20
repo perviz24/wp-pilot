@@ -1,0 +1,101 @@
+#!/bin/bash
+# PRE-PUSH HOOK — Defense-in-depth against hook bypass
+# Even if pre-commit/commit-msg hooks were bypassed (e.g., git -c core.hooksPath=""),
+# this hook catches missing artifacts before code reaches GitHub.
+# Runs automatically before every push. Agent cannot bypass this without also
+# bypassing push hooks — which requires TWO separate bypass commands.
+
+BLOCKED=0
+FEAT_COUNT=$(git log --oneline -30 2>/dev/null | grep -c "^[a-f0-9]* feat:" 2>/dev/null || true)
+FEAT_COUNT=${FEAT_COUNT:-0}
+SCAFFOLD_COUNT=$(git log --oneline -30 2>/dev/null | grep -c "^[a-f0-9]* scaffold:" 2>/dev/null || true)
+SCAFFOLD_COUNT=${SCAFFOLD_COUNT:-0}
+
+# ============================================
+# CHECK 1: TESTED.md required after feat #3
+# ============================================
+if [ "$FEAT_COUNT" -ge 3 ]; then
+    if [ ! -f "TESTED.md" ]; then
+        echo ""
+        echo "⛔ PUSH BLOCKED: $FEAT_COUNT features committed but TESTED.md does not exist."
+        echo "   HARD STOP 5 requires testing evidence after each feature."
+        echo "   Create TESTED.md with test results, commit it, then push."
+        echo ""
+        BLOCKED=1
+    fi
+fi
+
+# ============================================
+# CHECK 2: PROGRESS.md required after feat #3
+# ============================================
+if [ "$FEAT_COUNT" -ge 3 ]; then
+    if [ ! -f "PROGRESS.md" ]; then
+        echo ""
+        echo "⛔ PUSH BLOCKED: $FEAT_COUNT features committed but PROGRESS.md does not exist."
+        echo "   HARD STOP 6: PROGRESS.md is MANDATORY after feature #3."
+        echo "   Run git log, count features, write PROGRESS.md, commit it, then push."
+        echo ""
+        BLOCKED=1
+    fi
+fi
+
+# ============================================
+# CHECK 3: DESIGN-TOKENS.md required after scaffold + feat
+# ============================================
+if [ "$SCAFFOLD_COUNT" -ge 1 ] && [ "$FEAT_COUNT" -ge 1 ]; then
+    if [ ! -f "DESIGN-TOKENS.md" ]; then
+        echo ""
+        echo "⛔ PUSH BLOCKED: Scaffold + features but DESIGN-TOKENS.md does not exist."
+        echo "   HARD STOP 7: Lock design tokens before building features."
+        echo ""
+        BLOCKED=1
+    fi
+fi
+
+# ============================================
+# CHECK 4: File size check on ALL tracked source files
+# Catches oversized files that slipped through scaffold
+# ============================================
+for file in $(git ls-files -- '*.ts' '*.tsx' '*.js' '*.jsx' 2>/dev/null); do
+    if [ -f "$file" ]; then
+        lines=$(wc -l < "$file")
+        if [ "$lines" -gt 300 ]; then
+            echo "⛔ PUSH BLOCKED: $file has $lines lines (max 300). Split it before pushing."
+            BLOCKED=1
+        fi
+    fi
+done
+
+# ============================================
+# CHECK 5: HANDOFF.md freshness warning
+# Warns (not blocks) if HANDOFF.md is missing or stale
+# ============================================
+if [ "$FEAT_COUNT" -ge 1 ]; then
+    if [ ! -f "HANDOFF.md" ]; then
+        echo ""
+        echo "⚠️  WARNING: $FEAT_COUNT features committed but no HANDOFF.md found."
+        echo "   Session continuity requires HANDOFF.md. Generate it before ending session."
+        echo ""
+    elif [ -f "HANDOFF.md" ]; then
+        HANDOFF_MTIME=$(stat -c %Y "HANDOFF.md" 2>/dev/null || stat -f %m "HANDOFF.md" 2>/dev/null || echo "0")
+        LAST_COMMIT_TIME=$(git log -1 --format=%ct 2>/dev/null || echo "0")
+        HANDOFF_AGE=$(( LAST_COMMIT_TIME - HANDOFF_MTIME ))
+        if [ "$HANDOFF_AGE" -gt 3600 ]; then
+            echo ""
+            echo "⚠️  WARNING: HANDOFF.md is older than the latest commit (stale by $(( HANDOFF_AGE / 60 )) minutes)."
+            echo "   Regenerate HANDOFF.md to capture current session state before ending."
+            echo ""
+        fi
+    fi
+fi
+
+if [ "$BLOCKED" -eq 1 ]; then
+    echo ""
+    echo "Push blocked. Fix the issues above, commit the fixes, then push again."
+    echo ""
+    echo "NOTE: If you're seeing this, pre-commit hooks may have been bypassed."
+    echo "      This pre-push hook is a safety net. Do NOT bypass it."
+    exit 1
+fi
+
+exit 0

@@ -1,0 +1,239 @@
+#!/bin/bash
+# PRE-COMMIT HOOK — Mechanical enforcement of build rules
+# Runs automatically before every commit. Agent cannot bypass this.
+
+BLOCKED=0
+STAGED_FILES=$(git diff --cached --name-only 2>/dev/null || git diff --cached --name-only --diff-filter=A 2>/dev/null || true)
+FEAT_COUNT=$(git log --oneline -30 2>/dev/null | grep -c "^[a-f0-9]* feat:" 2>/dev/null || true)
+FEAT_COUNT=${FEAT_COUNT:-0}
+
+# ============================================
+# CHECK 1: File size limit (max 300 lines)
+# ============================================
+for file in $(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep -E '\.(tsx?|jsx?|ts|js)$'); do
+    if [ -f "$file" ]; then
+        lines=$(wc -l < "$file")
+        if [ "$lines" -gt 300 ]; then
+            echo "⛔ BLOCKED: $file has $lines lines (max 300). Split it before committing."
+            BLOCKED=1
+        fi
+    fi
+done
+
+# ============================================
+# CHECK 2: Fix spiral detection
+# ============================================
+FIX_COUNT=$(git log --oneline -20 2>/dev/null | grep -c "fix:" 2>/dev/null || true)
+FIX_COUNT=${FIX_COUNT:-0}
+if [ "$FIX_COUNT" -ge 4 ]; then
+    echo ""
+    echo "⚠️  WARNING: $FIX_COUNT fix commits in last 20. You may be spiraling."
+    echo "   Consider: disable the broken feature, log in BUGS.md, move on."
+    echo ""
+fi
+
+# ============================================
+# CHECK 3: TESTED.md artifact enforcement
+# ============================================
+if [ "$FEAT_COUNT" -ge 3 ]; then
+    if [ ! -f "TESTED.md" ]; then
+        echo ""
+        echo "⛔ BLOCKED: $FEAT_COUNT features committed but TESTED.md does not exist."
+        echo "   HARD STOP 5 requires Playwright testing after each feature."
+        echo "   Create TESTED.md with test results before committing more features."
+        echo ""
+        BLOCKED=1
+    fi
+fi
+
+# ============================================
+# CHECK 4: PROGRESS.md checkpoint enforcement
+# ============================================
+if [ "$FEAT_COUNT" -ge 3 ]; then
+    if [ ! -f "PROGRESS.md" ]; then
+        echo ""
+        echo "⛔ BLOCKED: $FEAT_COUNT features committed but PROGRESS.md does not exist."
+        echo "   HARD STOP 6: PROGRESS.md is MANDATORY after feature #3."
+        echo "   Run git log, count features, write PROGRESS.md, commit it first."
+        echo ""
+        BLOCKED=1
+    fi
+fi
+
+# ============================================
+# CHECK 5: No secrets in committed files
+# ============================================
+for file in $(git diff --cached --name-only --diff-filter=ACM 2>/dev/null); do
+    # Skip hook files (their regex patterns match themselves)
+    if echo "$file" | grep -qE '\.githooks/'; then
+        continue
+    fi
+    if [ -f "$file" ]; then
+        if grep -qE '(sk-[a-zA-Z0-9]{20,}|sk_live_[a-zA-Z0-9]{20,}|sk_test_[a-zA-Z0-9]{20,}|AKIA[A-Z0-9]{16}|ghp_[a-zA-Z0-9]{36}|eyJhbGciOi[a-zA-Z0-9]{20,}|CONVEX_DEPLOY_KEY)' "$file" 2>/dev/null; then
+            echo "⛔ BLOCKED: $file appears to contain an API key or secret. Remove it before committing."
+            BLOCKED=1
+        fi
+    fi
+done
+
+# ============================================
+# CHECK 6: No .env files committed
+# ============================================
+for file in $(git diff --cached --name-only 2>/dev/null); do
+    if echo "$file" | grep -qE '\.env(\.local|\.production)?$'; then
+        echo "⛔ BLOCKED: $file is an environment file. Add it to .gitignore."
+        BLOCKED=1
+    fi
+done
+
+# ============================================
+# CHECK 7: Self-improvement enforcement
+# When SESSION-SUMMARY.md is committed, enforce learning artifacts
+# ============================================
+if echo "$STAGED_FILES" | grep -q "SESSION-SUMMARY.md"; then
+    # 7a: WEAKNESS-LOG.md must exist (agent must reflect on what went wrong)
+    if [ ! -f "WEAKNESS-LOG.md" ]; then
+        echo ""
+        echo "⛔ BLOCKED: SESSION-SUMMARY.md committed but WEAKNESS-LOG.md does not exist."
+        echo "   You MUST log weaknesses discovered during this session."
+        echo "   Create WEAKNESS-LOG.md with at least one entry, even if minor."
+        echo "   Format: | What Happened | What Should Have Caught It | Proposed Fix |"
+        echo ""
+        BLOCKED=1
+    fi
+
+    # 7b: SESSION-SUMMARY.md must contain System Improvement Proposals section
+    if [ -f "SESSION-SUMMARY.md" ]; then
+        if ! grep -q "## System Improvement Proposals" "SESSION-SUMMARY.md" 2>/dev/null; then
+            echo ""
+            echo "⛔ BLOCKED: SESSION-SUMMARY.md missing '## System Improvement Proposals' section."
+            echo "   You MUST propose at least one improvement to the enforcement system."
+            echo "   Even if everything went perfectly, propose what could be BETTER."
+            echo ""
+            BLOCKED=1
+        fi
+    fi
+fi
+
+# ============================================
+# CHECK 8: DESIGN-TOKENS.md enforcement (HARD STOP 7)
+# After scaffold phase, design tokens must be locked
+# ============================================
+SCAFFOLD_COUNT=$(git log --oneline -30 2>/dev/null | grep -c "^[a-f0-9]* scaffold:" 2>/dev/null || true)
+SCAFFOLD_COUNT=${SCAFFOLD_COUNT:-0}
+
+if [ "$SCAFFOLD_COUNT" -ge 1 ] && [ "$FEAT_COUNT" -ge 1 ]; then
+    if [ ! -f "DESIGN-TOKENS.md" ]; then
+        echo ""
+        echo "⛔ BLOCKED: Scaffold complete + features being built but DESIGN-TOKENS.md does not exist."
+        echo "   HARD STOP 7: Lock colors, typography, spacing in DESIGN-TOKENS.md during scaffold."
+        echo "   Create DESIGN-TOKENS.md with your design choices before committing features."
+        echo ""
+        BLOCKED=1
+    fi
+fi
+
+# ============================================
+# CHECK 9: Color/design change detection
+# If a commit touches CSS color values but doesn't update DESIGN-TOKENS.md
+# ============================================
+if [ -f "DESIGN-TOKENS.md" ]; then
+    COLOR_CHANGE=0
+    TOKENS_CHANGED=0
+
+    for file in $(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep -E '\.(tsx?|jsx?|css)$'); do
+        if [ -f "$file" ]; then
+            if git diff --cached "$file" 2>/dev/null | grep -qE '^\+.*(bg-|text-|border-|fill-|stroke-)(red|blue|green|yellow|purple|pink|orange|emerald|sky|violet|rose|amber|lime|cyan|teal|indigo|fuchsia|zinc|slate|neutral|stone|gray)-[0-9]|^\+.*#[0-9a-fA-F]{6}'; then
+                COLOR_CHANGE=1
+            fi
+        fi
+    done
+
+    if echo "$STAGED_FILES" | grep -q "DESIGN-TOKENS.md"; then
+        TOKENS_CHANGED=1
+    fi
+
+    if [ "$COLOR_CHANGE" -eq 1 ] && [ "$TOKENS_CHANGED" -eq 0 ]; then
+        echo ""
+        echo "⚠️  WARNING: You're changing colors without updating DESIGN-TOKENS.md."
+        echo "   HARD STOP 7: Design changes should be documented in DESIGN-TOKENS.md."
+        echo "   If this is intentional, update DESIGN-TOKENS.md with the new colors and WHY."
+        echo ""
+    fi
+fi
+
+# ============================================
+# CHECK 10: Silent auth fallback detection (security anti-pattern)
+# Block noopMiddleware or conditional auth bypass patterns
+# ============================================
+for file in $(git diff --cached --name-only --diff-filter=ACM 2>/dev/null | grep -E '\.(tsx?|jsx?|ts|js)$'); do
+    if [ -f "$file" ]; then
+        if git diff --cached "$file" 2>/dev/null | grep -qE '^\+.*(noopMiddleware|noop.*[Mm]iddleware|hasClerkKeys\s*\?)'; then
+            echo ""
+            echo "⛔ BLOCKED: $file contains a silent auth fallback (noopMiddleware pattern)."
+            echo "   This silently DISABLES auth if Clerk keys are missing."
+            echo "   In production without env vars → ALL routes are unprotected."
+            echo ""
+            echo "   FIX: Fail loudly instead. If auth keys are missing, throw an error at startup."
+            echo "   Example: if (!key) throw new Error('CLERK_PUBLISHABLE_KEY is required')"
+            echo ""
+            BLOCKED=1
+        fi
+    fi
+done
+
+# ============================================
+# CHECK 11: Schema change backward compatibility warning
+# When modifying Convex schema after app has data (feat count >= 3)
+# ============================================
+SCHEMA_CHANGED=0
+for file in $(git diff --cached --name-only --diff-filter=M 2>/dev/null); do
+    if echo "$file" | grep -qE '(convex/schema\.(ts|js)|prisma/schema\.prisma)'; then
+        SCHEMA_CHANGED=1
+    fi
+done
+
+if [ "$SCHEMA_CHANGED" -eq 1 ] && [ "$FEAT_COUNT" -ge 3 ]; then
+    echo ""
+    echo "⚠️  WARNING: You're changing the database schema after $FEAT_COUNT features are built."
+    echo "   Existing data may not match the new schema → backward compatibility risk."
+    echo "   BEFORE committing:"
+    echo "   1. Are NEW fields optional (v.optional())? If not, existing records will break"
+    echo "   2. Are REMOVED fields still read anywhere? grep for the field name"
+    echo "   3. Do you need a data migration? Check Convex dashboard for existing records"
+    echo ""
+fi
+
+# ============================================
+# CHECK 12: auth.config.ts validation (Clerk+Convex)
+# When auth.config.ts is staged, verify it has correct applicationID
+# ============================================
+for file in $(git diff --cached --name-only --diff-filter=ACM 2>/dev/null); do
+    if echo "$file" | grep -qE 'convex/auth\.config\.(ts|js)$'; then
+        if [ -f "$file" ]; then
+            if ! grep -q 'applicationID.*"convex"' "$file" 2>/dev/null; then
+                echo ""
+                echo "⛔ BLOCKED: $file does not have applicationID: \"convex\"."
+                echo "   The Clerk JWT template MUST be named exactly \"convex\"."
+                echo "   auth.config.ts applicationID MUST match the JWT template name."
+                echo "   Fix: set applicationID: \"convex\" in the providers array."
+                echo ""
+                BLOCKED=1
+            fi
+            if ! grep -qE 'domain.*https://' "$file" 2>/dev/null; then
+                echo ""
+                echo "⚠️  WARNING: $file may be missing a valid domain URL."
+                echo "   Verify domain matches your Clerk issuer URL (e.g., https://xxx.clerk.accounts.dev)."
+                echo ""
+            fi
+        fi
+    fi
+done
+
+if [ "$BLOCKED" -eq 1 ]; then
+    echo ""
+    echo "Commit blocked. Fix the issues above and try again."
+    exit 1
+fi
+
+exit 0

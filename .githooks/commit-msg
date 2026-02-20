@@ -1,0 +1,376 @@
+#!/bin/bash
+# COMMIT-MSG HOOK — Enforces commit message discipline + scaffold boundary
+# Runs automatically after writing commit message, before commit finalizes.
+
+MSG=$(head -1 "$1")
+BLOCKED=0
+STAGED_FILES=$(git diff --cached --name-only 2>/dev/null || true)
+FEAT_COUNT=$(git log --oneline -30 2>/dev/null | grep -c "^[a-f0-9]* feat:" 2>/dev/null || true)
+FEAT_COUNT=${FEAT_COUNT:-0}
+
+# ============================================
+# CHECK 1: Feature batching detection
+# ============================================
+MSG_LEN=${#MSG}
+if [ "$MSG_LEN" -gt 72 ]; then
+    echo "⛔ BLOCKED: Commit message is $MSG_LEN chars (max 72). You're likely batching features."
+    echo "   Split into separate commits, each describing ONE thing in 3-7 words."
+    BLOCKED=1
+fi
+
+if echo "$MSG" | grep -qiE '\band\b.*\band\b'; then
+    echo "⛔ BLOCKED: Message contains multiple 'and's — this is feature batching."
+    BLOCKED=1
+fi
+
+COMMA_COUNT=$(echo "$MSG" | tr -cd ',' | wc -c)
+if [ "$COMMA_COUNT" -ge 2 ]; then
+    echo "⛔ BLOCKED: Message has $COMMA_COUNT commas — looks like a feature list. One feature per commit."
+    BLOCKED=1
+fi
+
+if echo "$MSG" | grep -qiE '(comprehensive|various|multiple improvements|several fixes)'; then
+    echo "⛔ BLOCKED: Words like 'comprehensive/various/multiple' signal batching. One feature per commit."
+    BLOCKED=1
+fi
+
+# ============================================
+# CHECK 2: Fix spiral hard stop
+# ============================================
+if echo "$MSG" | grep -q "^fix:"; then
+    FIX_COUNT=$(git log --oneline -15 2>/dev/null | grep -c "fix:" 2>/dev/null || true)
+    FIX_COUNT=${FIX_COUNT:-0}
+
+    if [ "$FIX_COUNT" -ge 4 ]; then
+        echo ""
+        echo "⛔ BLOCKED: This would be fix commit #$((FIX_COUNT + 1)) in recent history."
+        echo "   You are in a fix spiral. REQUIRED: Disable the broken feature."
+        echo "   Log the issue in BUGS.md. Move to the next task."
+        echo ""
+        BLOCKED=1
+    elif [ "$FIX_COUNT" -ge 2 ]; then
+        echo ""
+        echo "⚠️  WARNING: This is fix commit #$((FIX_COUNT + 1)) in this area."
+        echo "   At fix #5, this commit will be BLOCKED."
+        echo ""
+    fi
+fi
+
+# ============================================
+# CHECK 3: Require prefix
+# ============================================
+if ! echo "$MSG" | grep -qE '^(feat|fix|refactor|style|docs|chore|perf|test|scaffold):'; then
+    echo "⛔ BLOCKED: Commit message must start with a prefix (feat:, fix:, scaffold:, docs:, etc.)"
+    BLOCKED=1
+fi
+
+# ============================================
+# CHECK 4: PROGRESS.md enforcement on feat: commits
+# ============================================
+if echo "$MSG" | grep -q "^feat:"; then
+    NEXT_FEAT=$((FEAT_COUNT + 1))
+
+    if [ "$NEXT_FEAT" -ge 4 ] && [ ! -f "PROGRESS.md" ]; then
+        echo ""
+        echo "⛔ BLOCKED: This is feature #$NEXT_FEAT but PROGRESS.md does not exist."
+        echo "   HARD STOP 6: PROGRESS.md is MANDATORY after feature #3."
+        echo "   Create PROGRESS.md first (docs: add progress checkpoint), then retry."
+        echo ""
+        BLOCKED=1
+    elif [ "$NEXT_FEAT" -eq 3 ]; then
+        echo ""
+        echo "⚠️  REMINDER: This is feature #3. After committing, create PROGRESS.md (HARD STOP 6)."
+        echo "   Your NEXT feat: commit will be BLOCKED without it."
+        echo ""
+    fi
+fi
+
+# ============================================
+# CHECK 5: TESTED.md enforcement on feat: commits
+# ============================================
+# At feature #4+, TESTED.md MUST exist
+if echo "$MSG" | grep -q "^feat:"; then
+    NEXT_FEAT=$((FEAT_COUNT + 1))
+
+    if [ "$NEXT_FEAT" -ge 4 ] && [ ! -f "TESTED.md" ]; then
+        echo ""
+        echo "⛔ BLOCKED: This is feature #$NEXT_FEAT but TESTED.md does not exist."
+        echo "   HARD STOP 5: Run Playwright tests and write results to TESTED.md."
+        echo "   Create TESTED.md first (docs: add test results), then retry."
+        echo ""
+        BLOCKED=1
+    elif [ "$NEXT_FEAT" -eq 3 ]; then
+        echo ""
+        echo "⚠️  REMINDER: This is feature #3. Create TESTED.md with Playwright test results."
+        echo "   Your NEXT feat: commit will be BLOCKED without it."
+        echo ""
+    fi
+fi
+
+# ============================================
+# CHECK 6: Scaffold boundary enforcement
+# ============================================
+# scaffold: commits may ONLY contain config/boilerplate files.
+# Any project-specific .tsx (hero, landing, custom pages) = must be feat: commit.
+if echo "$MSG" | grep -q "^scaffold:"; then
+    SCAFFOLD_VIOLATION=0
+
+    for file in $(git diff --cached --name-only 2>/dev/null); do
+        # Allow: package.json, tsconfig, config files, .gitignore, README
+        if echo "$file" | grep -qE '(package\.json|package-lock\.json|tsconfig|next\.config|tailwind\.config|postcss\.config|\.gitignore|\.eslintrc|eslint\.config|README)'; then
+            continue
+        fi
+
+        # Allow: globals.css, lib/utils.ts
+        if echo "$file" | grep -qE '(globals\.css|lib/utils\.ts|lib/utils\.js)'; then
+            continue
+        fi
+
+        # Allow: shadcn components in components/ui/
+        if echo "$file" | grep -qE 'components/ui/'; then
+            continue
+        fi
+
+        # Allow: default Next.js boilerplate files
+        if echo "$file" | grep -qE '(layout\.(tsx|ts|js)|page\.(tsx|ts|js)|error\.(tsx|ts|js)|not-found\.(tsx|ts|js)|loading\.(tsx|ts|js))$'; then
+            continue
+        fi
+
+        # Allow: public/ assets (favicon, icons)
+        if echo "$file" | grep -qE '^public/'; then
+            continue
+        fi
+
+        # Allow: non-code files (md, json at root, env.example)
+        if echo "$file" | grep -qE '\.(md|json|mjs|cjs)$'; then
+            continue
+        fi
+
+        # Allow: convex config files
+        if echo "$file" | grep -qE '^convex/'; then
+            continue
+        fi
+
+        # BLOCK: Any .tsx/.ts/.jsx/.js that isn't in the allowed list above
+        if echo "$file" | grep -qE '\.(tsx|ts|jsx|js)$'; then
+            echo "⛔ SCAFFOLD VIOLATION: $file is a project-specific file."
+            echo "   scaffold: commits may only contain config/boilerplate."
+            echo "   Move this to a separate feat: commit."
+            SCAFFOLD_VIOLATION=1
+        fi
+    done
+
+    if [ "$SCAFFOLD_VIOLATION" -eq 1 ]; then
+        echo ""
+        echo "⛔ BLOCKED: scaffold: commit contains project-specific files."
+        echo "   Allowed in scaffold: package.json, tsconfig, config files, globals.css,"
+        echo "   lib/utils.ts, components/ui/*, layout.tsx, page.tsx (default template),"
+        echo "   error.tsx, not-found.tsx, loading.tsx, public/, convex/."
+        echo ""
+        echo "   Everything else must be a separate feat: commit."
+        echo ""
+        BLOCKED=1
+    fi
+fi
+
+# ============================================
+# CHECK 7: PRE-DEPLOY-AUDIT.md enforcement (Phase 5 gate)
+# Deploy-related commits require completed audit
+# ============================================
+if echo "$MSG" | grep -qiE '(deploy|pre-deploy|production|launch)'; then
+    if [ ! -f "PRE-DEPLOY-AUDIT.md" ]; then
+        echo ""
+        echo "⛔ BLOCKED: Deploy-related commit but PRE-DEPLOY-AUDIT.md does not exist."
+        echo "   Phase 5 requires expert pre-deploy audit (UX, SEO, Performance, Security, Accessibility, Domain)."
+        echo "   Complete the 6-step audit and write results to PRE-DEPLOY-AUDIT.md first."
+        echo ""
+        BLOCKED=1
+    else
+        MISSING_SECTIONS=""
+        for section in "## UX Review" "## SEO Audit" "## Performance" "## Security" "## Domain-Specific" "## Accessibility"; do
+            if ! grep -q "$section" "PRE-DEPLOY-AUDIT.md" 2>/dev/null; then
+                MISSING_SECTIONS="$MISSING_SECTIONS $section"
+            fi
+        done
+        # If Clerk+Convex project, require Dashboard Automation section
+        if [ -f "convex/auth.config.ts" ] || [ -f "convex/auth.config.js" ]; then
+            if ! grep -q "## Dashboard Automation" "PRE-DEPLOY-AUDIT.md" 2>/dev/null; then
+                MISSING_SECTIONS="$MISSING_SECTIONS ## Dashboard Automation"
+            fi
+        fi
+        if [ -n "$MISSING_SECTIONS" ]; then
+            echo ""
+            echo "⚠️  WARNING: PRE-DEPLOY-AUDIT.md is missing sections:$MISSING_SECTIONS"
+            echo "   Phase 5 requires ALL audit sections. Complete the missing audits."
+            echo ""
+        fi
+    fi
+fi
+
+# ============================================
+# CHECK 8: fix: commits require diagnosis evidence
+# Forces agent to classify the problem before committing a fix
+# ============================================
+if echo "$MSG" | grep -q "^fix:" && [ "$FEAT_COUNT" -ge 3 ]; then
+    if [ -f "TESTED.md" ]; then
+        if ! grep -qiE '(diagnosis|classification|root cause|problem type)' "TESTED.md" 2>/dev/null; then
+            echo ""
+            echo "⚠️  WARNING: fix: commit but TESTED.md has no diagnosis/classification section."
+            echo "   Before fixing: TEST with Playwright → CLASSIFY (UI bug? Runtime? Auth? Build?)"
+            echo "   Add a '| Diagnosis |' column or '## Root Cause' section to TESTED.md."
+            echo "   This prevents misdiagnosing UI bugs as infrastructure issues."
+            echo ""
+        fi
+    fi
+fi
+
+# ============================================
+# CHECK 9: New dependency without DECISIONS.md (HARD STOP 4)
+# When package.json changes with new deps, DECISIONS.md should be updated
+# ============================================
+if echo "$STAGED_FILES" | grep -q "package.json"; then
+    DECISIONS_STAGED=0
+    if echo "$STAGED_FILES" | grep -q "DECISIONS.md"; then
+        DECISIONS_STAGED=1
+    fi
+    # Check if package.json diff shows added dependencies (not just version bumps)
+    PKG_NEW_DEPS=$(git diff --cached package.json 2>/dev/null | grep -cE '^\+\s*"[^"]+"\s*:\s*"' 2>/dev/null || true)
+    PKG_NEW_DEPS=${PKG_NEW_DEPS:-0}
+    if [ "$PKG_NEW_DEPS" -ge 1 ] && [ "$DECISIONS_STAGED" -eq 0 ] && [ "$FEAT_COUNT" -ge 1 ]; then
+        echo ""
+        echo "⚠️  WARNING: New dependencies added to package.json but DECISIONS.md not updated."
+        echo "   HARD STOP 4: Research BEFORE installing new libraries."
+        echo "   Log in DECISIONS.md: what library, why chosen, serverless compatible?"
+        echo ""
+    fi
+fi
+
+# ============================================
+# CHECK 10: Session length limit (HARD STOP 8)
+# Block feat #16+ to force session end
+# ============================================
+if echo "$MSG" | grep -q "^feat:"; then
+    NEXT_FEAT=$((FEAT_COUNT + 1))
+    if [ "$NEXT_FEAT" -ge 16 ]; then
+        echo ""
+        echo "⛔ BLOCKED: This would be feature #$NEXT_FEAT. HARD STOP 8: Session limit is 15 features."
+        echo "   Write SESSION-SUMMARY.md. Commit. Push. End session."
+        echo "   Start a fresh session for the next batch of features."
+        echo ""
+        BLOCKED=1
+    elif [ "$NEXT_FEAT" -eq 14 ]; then
+        echo ""
+        echo "⚠️  REMINDER: This is feature #14. After feature #15, session MUST end (HARD STOP 8)."
+        echo "   Start planning SESSION-SUMMARY.md and WEAKNESS-LOG.md."
+        echo ""
+    fi
+fi
+
+# ============================================
+# CHECK 11: Brainstorm gate (Phase 1 enforcement)
+# First feat: commit requires BRAINSTORM.md with research + DECISIONS.md
+# ============================================
+if echo "$MSG" | grep -q "^feat:" && [ "$FEAT_COUNT" -eq 0 ]; then
+    BRAINSTORM_OK=1
+
+    if [ ! -f "BRAINSTORM.md" ]; then
+        echo ""
+        echo "⛔ BLOCKED: First feat: commit but BRAINSTORM.md does not exist."
+        echo "   Phase 1 requires expert brainstorming BEFORE coding."
+        echo "   Complete all 6 brainstorm steps and write BRAINSTORM.md first."
+        echo ""
+        BRAINSTORM_OK=0
+        BLOCKED=1
+    else
+        if ! grep -q "## Competitive Analysis" "BRAINSTORM.md" 2>/dev/null; then
+            echo ""
+            echo "⛔ BLOCKED: BRAINSTORM.md missing '## Competitive Analysis' section."
+            echo "   Phase 1 Step 2: Research 2-3 competitors with Exa/Firecrawl."
+            echo ""
+            BRAINSTORM_OK=0
+            BLOCKED=1
+        fi
+        if ! grep -q "## Domain Research" "BRAINSTORM.md" 2>/dev/null; then
+            echo ""
+            echo "⛔ BLOCKED: BRAINSTORM.md missing '## Domain Research' section."
+            echo "   Phase 1 Step 3: Research domain-specific best practices."
+            echo ""
+            BRAINSTORM_OK=0
+            BLOCKED=1
+        fi
+    fi
+
+    if [ ! -f "DECISIONS.md" ]; then
+        echo ""
+        echo "⛔ BLOCKED: First feat: commit but DECISIONS.md does not exist."
+        echo "   Phase 1 Step 5: Document architecture decisions with PROS/CONS."
+        echo ""
+        BLOCKED=1
+    elif [ "$BRAINSTORM_OK" -eq 1 ]; then
+        if ! grep -qiE '(pros|cons|pro:|con:)' "DECISIONS.md" 2>/dev/null; then
+            echo ""
+            echo "⚠️  WARNING: DECISIONS.md exists but has no PROS/CONS entries."
+            echo "   Phase 1 Step 5 requires at least one architecture debate."
+            echo ""
+        fi
+    fi
+fi
+
+# ============================================
+# CHECK 12: Self-improvement loop enforcement
+# When SESSION-SUMMARY.md is committed with UNRESOLVED weaknesses,
+# require at least one hook file change (proving mechanical enforcement was added)
+# ============================================
+if echo "$STAGED_FILES" | grep -q "SESSION-SUMMARY.md"; then
+    if [ -f "WEAKNESS-LOG.md" ]; then
+        UNRESOLVED_COUNT=$(grep -ci "UNRESOLVED" "WEAKNESS-LOG.md" 2>/dev/null || echo "0")
+        if [ "$UNRESOLVED_COUNT" -ge 1 ]; then
+            # Check if any hook files are also being committed
+            HOOK_CHANGED=0
+            if echo "$STAGED_FILES" | grep -qE '(\.githooks/|\.claude/hooks/|block-hook-bypass)'; then
+                HOOK_CHANGED=1
+            fi
+            if [ "$HOOK_CHANGED" -eq 0 ]; then
+                echo ""
+                echo "⚠️  WARNING: SESSION-SUMMARY.md committed but WEAKNESS-LOG.md has $UNRESOLVED_COUNT UNRESOLVED entries."
+                echo "   Self-improvement loop: UNRESOLVED weaknesses should become MECHANICAL enforcement."
+                echo "   Read .claude/rules/enforcement-playbook.md → add hooks, not just documentation."
+                echo "   Stage a hook file change alongside this commit, or mark entries as MONITORING/RESOLVED."
+                echo ""
+            fi
+        fi
+    fi
+fi
+
+# ============================================
+# CHECK 13: Rule Addition Gate (anti-bloat)
+# Warn when .claude/rules/*.md files are modified with significant growth
+# Prevents accumulating rules without justification
+# ============================================
+RULES_CHANGED=$(echo "$STAGED_FILES" | grep -c '\.claude/rules/.*\.md' 2>/dev/null || echo "0")
+if [ "$RULES_CHANGED" -ge 1 ]; then
+    # Count net line additions across all rules files
+    NET_ADDED=$(git diff --cached --numstat -- '.claude/rules/*.md' 2>/dev/null | awk '{sum += ($1 - $2)} END {print sum+0}')
+    if [ "$NET_ADDED" -gt 20 ]; then
+        echo ""
+        echo "⚠️  RULE BLOAT WARNING: $RULES_CHANGED rules file(s) changed with +$NET_ADDED net lines."
+        echo "   Net-zero rule: if you add a line, remove a line. Files must NOT grow over time."
+        echo "   Check: Is this replacing an existing rule, or just adding more? Read enforcement-playbook.md."
+        echo ""
+    fi
+    if [ "$RULES_CHANGED" -gt 3 ]; then
+        echo ""
+        echo "⚠️  RULE SCATTER WARNING: $RULES_CHANGED rules files modified in one commit."
+        echo "   Modifying 4+ rules files at once suggests a systemic change."
+        echo "   Verify: Did you check for conflicts? Does this duplicate existing guidance?"
+        echo ""
+    fi
+fi
+
+if [ "$BLOCKED" -eq 1 ]; then
+    echo ""
+    echo "Commit blocked. Fix the issue and try again."
+    exit 1
+fi
+
+exit 0
