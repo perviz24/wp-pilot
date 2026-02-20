@@ -1,7 +1,7 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery, useMutation, useAction } from "convex/react";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
@@ -27,12 +27,12 @@ import {
   FolderOpen,
   ScrollText,
   Puzzle,
-  CheckCircle2,
-  XCircle,
+  Loader2,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { useState } from "react";
+import { LayerCard } from "@/components/layer-card";
 
 function formatDate(timestamp: number | undefined): string {
   if (!timestamp) return "Never";
@@ -45,35 +45,6 @@ function formatDate(timestamp: number | undefined): string {
   });
 }
 
-function LayerCard({
-  connected,
-  icon: Icon,
-  iconColor,
-  title,
-  description,
-}: {
-  connected: boolean;
-  icon: typeof Server;
-  iconColor: string;
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-lg border p-3">
-      <Icon className={`h-4 w-4 shrink-0 ${iconColor}`} />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium">{title}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
-      </div>
-      {connected ? (
-        <CheckCircle2 className="h-4 w-4 shrink-0 text-green-500" />
-      ) : (
-        <XCircle className="h-4 w-4 shrink-0 text-muted-foreground/40" />
-      )}
-    </div>
-  );
-}
-
 export default function SiteDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -82,7 +53,9 @@ export default function SiteDetailPage() {
     siteId: siteId as Id<"sites">,
   });
   const deleteSite = useMutation(api.sites.deleteSite);
+  const triggerBackup = useAction(api.backups.triggerCpanelBackup);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
 
   // Loading
   if (site === undefined) {
@@ -120,6 +93,18 @@ export default function SiteDetailPage() {
       </div>
     );
   }
+
+  const handleBackup = async () => {
+    setIsBackingUp(true);
+    try {
+      await triggerBackup({ siteId: site._id });
+      toast.success("Backup started successfully");
+    } catch {
+      toast.error("Failed to start backup");
+    } finally {
+      setIsBackingUp(false);
+    }
+  };
 
   const handleDelete = async () => {
     if (!confirm(`Delete "${site.name}"? This cannot be undone.`)) return;
@@ -205,9 +190,18 @@ export default function SiteDetailPage() {
           <CardTitle className="text-base">Quick Actions</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-2 sm:grid-cols-2">
-          <Button variant="outline" className="justify-start" disabled={!site.cpanelConnected}>
-            <Shield className="mr-2 h-4 w-4" />
-            Create Backup
+          <Button
+            variant="outline"
+            className="justify-start"
+            disabled={!site.cpanelConnected || isBackingUp}
+            onClick={handleBackup}
+          >
+            {isBackingUp ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Shield className="mr-2 h-4 w-4" />
+            )}
+            {isBackingUp ? "Backing up..." : "Create Backup"}
           </Button>
           <Button variant="outline" className="justify-start" disabled={!site.cpanelConnected}>
             <FolderOpen className="mr-2 h-4 w-4" />
