@@ -33,6 +33,7 @@ import Link from "next/link";
 import { toast } from "sonner";
 import { useState } from "react";
 import { LayerCard } from "@/components/layer-card";
+import { BackupHistory } from "@/components/backup-history";
 
 function formatDate(timestamp: number | undefined): string {
   if (!timestamp) return "Never";
@@ -217,6 +218,9 @@ export default function SiteDetailPage() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Backup history */}
+      <BackupHistory siteId={site._id} />
 
       {/* Site info */}
       <Card>
