@@ -204,9 +204,11 @@ export default function SiteDetailPage() {
             )}
             {isBackingUp ? "Backing up..." : "Create Backup"}
           </Button>
-          <Button variant="outline" className="justify-start" disabled={!site.cpanelConnected}>
-            <FolderOpen className="mr-2 h-4 w-4" />
-            Browse Files
+          <Button variant="outline" className="justify-start" disabled={!site.cpanelConnected} asChild>
+            <Link href={`/dashboard/site/${siteId}/files`}>
+              <FolderOpen className="mr-2 h-4 w-4" />
+              Browse Files
+            </Link>
           </Button>
           <Button variant="outline" className="justify-start">
             <ScrollText className="mr-2 h-4 w-4" />

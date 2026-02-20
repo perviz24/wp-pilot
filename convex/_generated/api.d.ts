@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as backups from "../backups.js";
+import type * as files from "../files.js";
 import type * as sites from "../sites.js";
 
 import type {
@@ -17,6 +19,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  backups: typeof backups;
+  files: typeof files;
   sites: typeof sites;
 }>;
 
