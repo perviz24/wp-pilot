@@ -210,9 +210,11 @@ export default function SiteDetailPage() {
               Browse Files
             </Link>
           </Button>
-          <Button variant="outline" className="justify-start">
-            <ScrollText className="mr-2 h-4 w-4" />
-            Audit Log
+          <Button variant="outline" className="justify-start" asChild>
+            <Link href={`/dashboard/site/${siteId}/audit`}>
+              <ScrollText className="mr-2 h-4 w-4" />
+              Audit Log
+            </Link>
           </Button>
           <Button variant="outline" className="justify-start" disabled={!site.wpRestConnected}>
             <Puzzle className="mr-2 h-4 w-4" />

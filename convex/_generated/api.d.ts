@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as auditLogs from "../auditLogs.js";
 import type * as backups from "../backups.js";
 import type * as files from "../files.js";
 import type * as sites from "../sites.js";
@@ -19,6 +20,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  auditLogs: typeof auditLogs;
   backups: typeof backups;
   files: typeof files;
   sites: typeof sites;
