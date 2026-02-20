@@ -16,6 +16,30 @@ export const listByUser = query({
   },
 });
 
+export const getById = query({
+  args: { siteId: v.id("sites") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+    const site = await ctx.db.get(args.siteId);
+    if (!site || site.userId !== identity.subject) return null;
+    return site;
+  },
+});
+
+export const deleteSite = mutation({
+  args: { siteId: v.id("sites") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const site = await ctx.db.get(args.siteId);
+    if (!site || site.userId !== identity.subject) {
+      throw new Error("Site not found");
+    }
+    await ctx.db.delete(args.siteId);
+  },
+});
+
 export const addSite = mutation({
   args: {
     name: v.string(),
