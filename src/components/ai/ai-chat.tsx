@@ -69,7 +69,7 @@ export function AiChat({
   const { messages, sendMessage, status, stop, error } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/ai/chat",
-      body: { system: systemPrompt },
+      body: { system: systemPrompt, siteId },
     }),
     messages: initialMessages,
     onFinish: handleFinish,
