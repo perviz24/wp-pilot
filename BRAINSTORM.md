@@ -1,7 +1,7 @@
 # WP Pilot — Expert Brainstorm Analysis
 Generated: 2026-02-20
 
-## 1. Competitive Landscape
+## Competitive Analysis
 
 ### Direct Competitors
 | Product | Strengths | Weaknesses | WP Pilot Advantage |
@@ -24,7 +24,7 @@ Generated: 2026-02-20
 - No risk classification — treat all operations as equal
 - No audit trail — can't trace who changed what
 
-## 2. Domain Research Findings
+## Domain Research
 
 ### Credential Security
 - **AES-256-GCM** is industry standard for at-rest encryption

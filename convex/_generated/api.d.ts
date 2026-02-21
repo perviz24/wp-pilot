@@ -8,6 +8,9 @@
  * @module
  */
 
+import type * as aiMessages from "../aiMessages.js";
+import type * as aiSessions from "../aiSessions.js";
+import type * as aiSiteMemory from "../aiSiteMemory.js";
 import type * as auditLogs from "../auditLogs.js";
 import type * as backups from "../backups.js";
 import type * as discovery from "../discovery.js";
@@ -21,6 +24,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aiMessages: typeof aiMessages;
+  aiSessions: typeof aiSessions;
+  aiSiteMemory: typeof aiSiteMemory;
   auditLogs: typeof auditLogs;
   backups: typeof backups;
   discovery: typeof discovery;

@@ -28,6 +28,7 @@ import {
   ScrollText,
   Puzzle,
   Loader2,
+  Brain,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -191,6 +192,12 @@ export default function SiteDetailPage() {
           <CardTitle className="text-base">Quick Actions</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-2 sm:grid-cols-2">
+          <Button variant="default" className="justify-start" asChild>
+            <Link href={`/dashboard/site/${siteId}/ai`}>
+              <Brain className="mr-2 h-4 w-4" />
+              AI Brain
+            </Link>
+          </Button>
           <Button
             variant="outline"
             className="justify-start"
