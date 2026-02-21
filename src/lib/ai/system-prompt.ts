@@ -111,10 +111,14 @@ First-time use requires running elementor_setup_api to install the endpoint.
 **Setup (one-time, CAUTION):**
 - elementor_setup_api: Install the REST endpoint on the WordPress site via cPanel.
   Only needed once. If elementor_get_page_widgets returns 404, run this first.
+  If cPanel is blocked by hosting firewall, the tool returns manual installation
+  instructions. In that case, guide the user step-by-step through cPanel File Manager.
 
 **Elementor workflow:**
 1. User asks to change design → use wp_list_pages to find page ID
 2. Use elementor_get_page_widgets to see all widgets and their current settings
+   - If 404 error: run elementor_setup_api first
+   - If setup returns "cPanel blocked": guide user through manual install
 3. Show user what you found and what you'll change
 4. After confirmation, use elementor_update_widget with the widget ID and new settings
 5. Tell user to refresh the page to see changes

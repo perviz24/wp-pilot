@@ -253,6 +253,29 @@ CAUTION: Creates a file on the server. Explain to the user what this does before
         );
 
         if (!response.ok) {
+          const isWafBlock =
+            response.status === 415 ||
+            response.status === 403 ||
+            response.status === 406;
+          if (isWafBlock) {
+            return {
+              success: false,
+              error: `cPanel API blocked (HTTP ${response.status}). The hosting firewall (Imunify360/ModSecurity) is blocking API calls from external servers.`,
+              manualInstallation: {
+                instructions:
+                  "The user needs to install the file manually via cPanel File Manager:",
+                steps: [
+                  "1. Log into cPanel at your hosting provider",
+                  "2. Open 'File Manager'",
+                  "3. Navigate to public_html/wp-content/",
+                  "4. Create a folder called 'mu-plugins' (if it doesn't exist)",
+                  "5. Inside mu-plugins, create a new file called 'wp-pilot-elementor-api.php'",
+                  "6. Paste the PHP code I'll provide, then Save",
+                ],
+                note: "After installation, the Elementor read/update tools will work normally through the WP REST API (which is not blocked).",
+              },
+            };
+          }
           return `cPanel error ${response.status}: Could not write mu-plugin file.`;
         }
 
