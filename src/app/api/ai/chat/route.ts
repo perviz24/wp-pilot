@@ -11,7 +11,8 @@ import { getConvexToken } from "@/lib/convex-auth";
 import { buildAiTools } from "@/lib/ai/tools";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 
-export const maxDuration = 60;
+// Doctor mode audits can trigger 5+ sequential tool calls with external API latency
+export const maxDuration = 120;
 
 export async function POST(req: Request) {
   const { userId } = await auth();

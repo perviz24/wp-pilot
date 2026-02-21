@@ -108,6 +108,16 @@ export function AiChat({
 
   const isLoading = status === "submitted" || status === "streaming";
 
+  // Safety timeout: if stream appears stuck for >150s, force-stop to unblock UI
+  // (Vercel maxDuration is 120s — if still "streaming" after 150s, connection dropped)
+  useEffect(() => {
+    if (!isLoading) return;
+    const timer = setTimeout(() => {
+      stop();
+    }, 150_000);
+    return () => clearTimeout(timer);
+  }, [isLoading, stop]);
+
   // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (scrollRef.current) {
