@@ -6,10 +6,6 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Plus,
-  History,
-  FolderOpen,
-  ClipboardList,
-  Puzzle,
   Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,10 +13,6 @@ import { cn } from "@/lib/utils";
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/dashboard/add-site", label: "Add Site", icon: Plus },
-  { href: "/dashboard/backups", label: "Backups", icon: History },
-  { href: "/dashboard/files", label: "File Browser", icon: FolderOpen },
-  { href: "/dashboard/audit-log", label: "Audit Log", icon: ClipboardList },
-  { href: "/dashboard/plugins", label: "Plugins", icon: Puzzle },
 ];
 
 export default function DashboardLayout({
