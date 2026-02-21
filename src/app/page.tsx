@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Shield, Server, Paintbrush, FileCode, Eye } from "lucide-react";
 import Link from "next/link";
+import { SignedIn, SignedOut } from "@clerk/nextjs";
 
 const layers = [
   {
@@ -61,12 +62,16 @@ export default function Home() {
         </div>
 
         <div className="flex gap-3 justify-center">
-          <Button asChild size="lg">
-            <Link href="/dashboard">Go to Dashboard</Link>
-          </Button>
-          <Button asChild variant="outline" size="lg">
-            <Link href="/sign-in">Sign In</Link>
-          </Button>
+          <SignedIn>
+            <Button asChild size="lg">
+              <Link href="/dashboard">Go to Dashboard</Link>
+            </Button>
+          </SignedIn>
+          <SignedOut>
+            <Button asChild size="lg">
+              <Link href="/sign-in">Sign In</Link>
+            </Button>
+          </SignedOut>
         </div>
       </div>
     </div>
