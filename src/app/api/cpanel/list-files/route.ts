@@ -1,7 +1,8 @@
 /**
  * Vercel API route proxy for cPanel file listing.
- * Used as fallback when Convex cloud IPs are blocked by Imunify360.
- * Runs on Vercel's infrastructure (different IPs from Convex).
+ * cPanel UAPI requires POST with Content-Type: application/x-www-form-urlencoded.
+ * Using GET or application/json causes HTTP 415 (Unsupported Media Type).
+ * Auth format: "cpanel username:APITOKEN" (not Basic auth).
  */
 
 import { auth } from "@clerk/nextjs/server";
@@ -68,21 +69,21 @@ export async function POST(req: Request) {
     );
   }
 
-  // Build cPanel API URL — try standard port first, then service subdomain
-  const params = new URLSearchParams({
+  // cPanel UAPI: POST with form-urlencoded body (NOT GET with query params)
+  const uapiPath = "/execute/Fileman/list_files";
+  const formParams = new URLSearchParams({
     dir,
     include_mime: "0",
     include_hash: "0",
     include_permissions: "0",
   });
-  const apiPath = `/execute/Fileman/list_files?${params}`;
   const authHeader = `cpanel ${creds.username}:${creds.token}`;
 
-  // Build list of URLs to try
-  const urls = buildUrls(creds.host, creds.port, site.url, apiPath);
+  // Build list of base URLs to try (path only, no query string)
+  const urls = buildUrls(creds.host, creds.port, site.url, uapiPath);
 
   for (const url of urls) {
-    const result = await tryCpanelFetch(url, authHeader);
+    const result = await tryCpanelFetch(url, authHeader, formParams);
 
     if (result.ok) {
       const files = parseFiles(result.data, dir);
@@ -140,12 +141,17 @@ type FetchResult =
 async function tryCpanelFetch(
   url: string,
   authHeader: string,
+  formParams: URLSearchParams,
 ): Promise<FetchResult> {
   let response: Response;
   try {
     response = await fetch(url, {
-      method: "GET",
-      headers: { Authorization: authHeader, Accept: "application/json" },
+      method: "POST",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: formParams.toString(),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

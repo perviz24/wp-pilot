@@ -9,19 +9,33 @@ import type { ToolContext } from "./types";
 import { getSiteRecord, getCpanelCredentials, buildCpanelAuthHeader } from "./credential-access";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
-/** Helper: make an authenticated cPanel UAPI call */
+/**
+ * Helper: make an authenticated cPanel UAPI call.
+ * cPanel UAPI requires POST with application/x-www-form-urlencoded body.
+ * Using GET or application/json causes HTTP 415 (Unsupported Media Type).
+ * Auth format: "cpanel username:APITOKEN" (token-based, not Basic auth).
+ */
 async function cpanelFetch(
   host: string,
   port: number,
-  endpoint: string,
+  uapiPath: string,
   authHeader: string,
-): Promise<{ ok: boolean; data: unknown }> {
-  const url = `https://${host}:${port}${endpoint}`;
+  params?: Record<string, string>,
+): Promise<{ ok: boolean; data: unknown; status: number }> {
+  const url = `https://${host}:${port}${uapiPath}`;
+  const body = params
+    ? new URLSearchParams(params).toString()
+    : "";
   const response = await fetch(url, {
-    headers: { Authorization: authHeader },
+    method: "POST",
+    headers: {
+      Authorization: authHeader,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body,
   });
   const data = await response.json().catch(() => null);
-  return { ok: response.ok, data };
+  return { ok: response.ok, data, status: response.status };
 }
 
 /** Validate cPanel connection before tool use */
@@ -53,8 +67,12 @@ Common paths: /public_html (site root), /public_html/wp-content/themes, /public_
         const cp = await getCpanelContext(ctx);
         if ("error" in cp) return cp.error;
 
-        const endpoint = `/execute/Fileman/list_files?dir=${encodeURIComponent(path)}&include_mime=1&include_hash=0&include_permissions=1`;
-        const result = await cpanelFetch(cp.creds.host, cp.creds.port, endpoint, cp.authHeader);
+        const result = await cpanelFetch(
+          cp.creds.host, cp.creds.port,
+          "/execute/Fileman/list_files",
+          cp.authHeader,
+          { dir: path, include_mime: "1", include_hash: "0", include_permissions: "1" },
+        );
 
         if (!result.ok) return "cPanel error: Could not list files.";
 
@@ -90,8 +108,13 @@ WARNING: Only read text files. Do not read binary files (images, zips).`,
           return `Blocked: Reading ${fileName} is not allowed — it contains database credentials and security keys.`;
         }
 
-        const endpoint = `/execute/Fileman/get_file_content?dir=${encodeURIComponent(path.substring(0, path.lastIndexOf("/")))}&file=${encodeURIComponent(fileName)}`;
-        const result = await cpanelFetch(cp.creds.host, cp.creds.port, endpoint, cp.authHeader);
+        const dirPath = path.substring(0, path.lastIndexOf("/"));
+        const result = await cpanelFetch(
+          cp.creds.host, cp.creds.port,
+          "/execute/Fileman/get_file_content",
+          cp.authHeader,
+          { dir: dirPath, file: fileName },
+        );
 
         if (!result.ok) return `cPanel error: Could not read file "${path}".`;
 
@@ -115,8 +138,11 @@ The AI should inform the user that a backup is being created and explain it may 
         const cp = await getCpanelContext(ctx);
         if ("error" in cp) return cp.error;
 
-        const endpoint = "/execute/Backup/fullbackup_to_homedir";
-        const result = await cpanelFetch(cp.creds.host, cp.creds.port, endpoint, cp.authHeader);
+        const result = await cpanelFetch(
+          cp.creds.host, cp.creds.port,
+          "/execute/Backup/fullbackup_to_homedir",
+          cp.authHeader,
+        );
 
         if (!result.ok) return "cPanel error: Could not trigger backup.";
 
