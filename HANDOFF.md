@@ -1,30 +1,34 @@
 # HANDOFF — WP Pilot
-Generated: 2026-02-21 (Session 7 — Elementor Design Tools + Testing)
+Generated: 2026-02-21 (Session 8 — 3-Layer Cross-Site Knowledge System)
 
 ## What Was Built This Session
-- Elementor REST API endpoint installed on WordPress via Code Snippets plugin (bypasses cPanel WAF)
-- WAF detection added to elementor_setup_api tool (HTTP 415/403/406 detection + manual install instructions)
-- System prompt updated with Elementor workflow documentation and WAF fallback
-- Full end-to-end testing of Elementor tools: READ (55 widgets), WRITE (color change), REVERT (restore original)
-- 4 Memory MCP entities stored (elementor-tools, cpanel-waf-issue, architecture-layers, elementor-workflow)
+- **3-layer cross-site knowledge architecture**: Global knowledge (Layer 1), Pattern library (Layer 2), Site memory (Layer 3)
+- New Convex tables: `aiGlobalKnowledge` + `aiPatternLibrary` with indexes
+- New Convex functions: upsert, listAll, listApplicable, listByCategory for both tables
+- Auto-promotion logic: patterns with confidence >= 0.8 AND testedOn >= 3 sites promote to global
+- 3 new AI tools: `save_global_knowledge`, `save_pattern`, `read_knowledge` (merges all 3 layers)
+- System prompt builder updated to inject all 3 layers with token budget caps
+- Page.tsx wired to fetch and pass global knowledge + patterns to system prompt
+- Seed script with 10 global entries + 3 cross-site patterns (from Memory MCP analysis)
+- Seeded both dev and prod Convex deployments
 
 ## Current State
 - Live URL: https://wp-pilot-one.vercel.app
-- Last commit: 36eb7d4 refactor: add WAF detection for Elementor setup
+- Last commit: db8072a feat: seed 10 global knowledge entries + 3 cross-site patterns
 - Git: all committed and pushed, branch up to date
-- Known issues: cPanel API blocked by hosting WAF (Imunify360) — email sent to hosting, awaiting response
-- AI Brain: All 15 tools working (12 original + 3 Elementor)
-- Elementor tools: fully tested on production — read, write, revert all confirmed working
-- Code Snippet: "WP Pilot Elementor API" installed on academy.geniusmotion.se, priority 10, scope "Run everywhere"
+- Known issues: cPanel API blocked by hosting WAF (Imunify360) — unchanged from last session
+- AI Brain: All 18 tools working (15 original + 3 knowledge tools)
+- Knowledge system: 10 global entries + 3 patterns seeded in production
+- Zero console errors on live URL
 
 ## Next Steps (priority order)
-1. **Await hosting response** — cPanel API whitelist for Vercel IPs (email sent to misshosting.com)
+1. **Test knowledge tools live** — ask AI to use `read_knowledge` and `save_pattern` in a real conversation
 2. **Polish UI** — improve chat experience, add markdown rendering, better tool result display
-3. **Add more Elementor operations** — section-level changes, adding/removing widgets
-4. **Upgrade to Clerk production** when ready for real users
-5. **Test cPanel tools** once WAF whitelist is in place
+3. **Add more sites** — knowledge system becomes more valuable with each site added
+4. **Await hosting response** — cPanel API whitelist for Vercel IPs
+5. **Upgrade to Clerk production** when ready for real users
 
-## All Features (15 AI tools + app features)
+## All Features (18 AI tools + app features)
 - Feature 1: Clerk auth + Convex integration + dashboard layout
 - Feature 2: Site wizard with 3 credential types (cPanel, WP REST, WP Admin)
 - Feature 3: cPanel backup trigger via UAPI
@@ -40,8 +44,15 @@ Generated: 2026-02-21 (Session 7 — Elementor Design Tools + Testing)
 - Feature #10-12: Modular AI tools — memory, WP REST read, WP REST write, cPanel
 - Feature #13: Session title auto-generation — Sonnet 4 generates 3-6 word titles
 - Feature #14-16: Elementor tools — read widgets, update widget settings, setup API endpoint (with WAF fallback)
+- **Feature #17: 3-layer knowledge system** — global knowledge + pattern library + knowledge tools
 
 ## Key Architecture Decisions
+- **3-layer knowledge architecture**: Layer 1 (aiGlobalKnowledge = universal truths), Layer 2 (aiPatternLibrary = cross-site patterns with confidence scoring), Layer 3 (aiSiteMemory = per-site memories)
+- **Auto-promotion**: confidence >= 0.8 AND testedOn >= 3 unique sites → auto-promotes pattern to global knowledge
+- **Confidence formula**: successRate + unique-site bonus (+0.1 per site, cap +0.3), max 1.0
+- **Token budget**: Global knowledge 5 per category, patterns 15 max, site memories uncapped
+- **Selective seeding**: Only high-value operational knowledge from Memory MCP — excluded routing tables (already in tool descriptions), URLs, implementation details
+- **Seed script**: convex/seedKnowledge.ts is an internalMutation (no auth), idempotent (checks before insert)
 - **3-layer architecture**: Layer 1 (WP REST API for content), Layer 2 (cPanel UAPI for server — blocked), Layer 3 (Custom Elementor REST API for design)
 - Encrypted credentials: AES-256-GCM in Convex (src/lib/crypto.ts), NOT env vars per-site
 - File risk classification: src/lib/file-risk.ts maps WordPress files to risk levels
@@ -49,12 +60,10 @@ Generated: 2026-02-21 (Session 7 — Elementor Design Tools + Testing)
 - API discovery: fetches /wp-json/ root, maps namespaces to friendly labels + categories
 - Convex actions for external API calls (cPanel, WP REST), mutations for DB writes
 - AI Brain uses Vercel AI SDK v6 with `streamText` + `toUIMessageStreamResponse()`
-- System prompt dynamically built from site context + persistent memories
+- System prompt dynamically built from site context + persistent memories + global knowledge + patterns
 - AI tools: Vercel AI SDK `tool()` uses `inputSchema` (Zod), NOT `parameters`
-- Modular tools: src/lib/ai/tools/index.ts assembles 5 modules (memory, wp-rest-read, wp-rest-write, cpanel, elementor)
+- Modular tools: src/lib/ai/tools/index.ts assembles 6 modules (memory, knowledge, wp-rest-read, wp-rest-write, cpanel, elementor)
 - **Elementor approach**: Custom REST endpoints via Code Snippets plugin (not mu-plugins), reads/writes _elementor_data post_meta
-- **Elementor backup**: Automatic _elementor_data_backup_{timestamp} created before every widget update
-- **Elementor cache**: Clears _elementor_css + Elementor Plugin files_manager->clear_cache() after updates
 - Title generation: separate /api/ai/title endpoint using Sonnet 4 (not Haiku — user preference)
 - Multi-step tool calling: `stopWhen: stepCountIs(5)` lets AI continue text after tool use
 
