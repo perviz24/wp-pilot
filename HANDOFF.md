@@ -1,35 +1,27 @@
 # HANDOFF — WP Pilot
-Generated: 2026-02-21 (Session 3 — AI Brain)
+Generated: 2026-02-21 (Session 4 — AI Brain persistence + sessions)
 
 ## What Was Built This Session
-- Landing page auth fix: "Go to Dashboard" button when signed in — working
-- JWT template verification via Playwright — verified
-- UI healing on all pages — passed 8/10+
-- Post-deploy auth flows tested — working
-- GitHub → Vercel auto-deploy connected — working
-- AI Brain Feature #1: Schema tables (aiSessions, aiMessages, aiSiteMemory) — working
-- AI Brain Feature #2: Convex functions (CRUD for sessions/messages/memory) — working
-- AI Brain Feature #3: Dynamic system prompt builder (site context + memories) — working
-- AI Brain Feature #4: API route /api/ai/chat with Vercel AI SDK v5 streaming — working
-- AI Brain Feature #5: Chat UI components (ChatMessage, ChatInput) — working
-- AI Brain Feature #6: AI Brain page with Builder/Doctor mode tabs — working
-- ANTHROPIC_API_KEY created and deployed — working
+- AI Brain Feature #7: Message persistence (save/load to Convex aiMessages) — working
+- AI Brain Feature #8: Session history sidebar (list, switch, new chat, archive) — working
+- Bug fix: stale closure in onFinish causing messages to not persist — fixed
+- Bug fix: mode switch showing stale Builder messages in Doctor tab — fixed (useEffect dependency)
 
 ## Current State
 - Live URL: https://wp-pilot-one.vercel.app
-- Last commit: 86d2e06 feat: add AI Brain page with Builder/Doctor mode tabs
+- Last commit: 07717e7 chore: fix useEffect dependency for mode switch resolution
 - Git: all committed and pushed, branch up to date
-- Known issues: none — AI chat tested end-to-end on production with 0 console errors
-- AI Brain: both Builder and Doctor modes stream responses correctly
-- AI is context-aware (knows site name, URL, 0/3 layers connected)
+- Known issues: none — all features tested on production with 0 console errors
+- AI Brain: both Builder and Doctor modes work correctly
+- Session sidebar: opens from History button, shows session list, New Chat, Archive
+- Mode switching: correctly resets state between Builder/Doctor
 
 ## Next Steps (priority order)
-1. **Message persistence** — save chat messages to Convex (aiMessages table) so conversations persist across sessions
-2. **Session management** — create/resume AI sessions (aiSessions table) with session list UI
-3. **Memory upsert from AI** — let AI save learnings to aiSiteMemory during conversations
-4. **Connect API layers** — actually wire cPanel/WP REST/WP Admin credentials to AI actions
-5. **AI action execution** — let AI trigger real WordPress operations (create pages, install plugins, etc.)
-6. **Upgrade to Clerk production** when ready for real users
+1. **Memory upsert from AI** — let AI save learnings to aiSiteMemory during conversations
+2. **Connect API layers** — wire cPanel/WP REST/WP Admin credentials to AI actions
+3. **AI action execution** — let AI trigger real WordPress operations (create pages, install plugins, etc.)
+4. **Session title auto-generation** — use AI to generate session titles from first message
+5. **Upgrade to Clerk production** when ready for real users
 
 ## Previous Session Features (all working)
 - Feature 1: Clerk auth + Convex integration + dashboard layout
@@ -40,6 +32,9 @@ Generated: 2026-02-21 (Session 3 — AI Brain)
 - Feature 6: Read-only file browser with risk colors (critical/caution/safe)
 - Feature 7: Audit log viewer with layer icons and risk badges
 - Feature 8: REST API namespace discovery via /wp-json/
+- AI Brain #1-6: Schema, Convex functions, system prompt, API route, chat UI, Builder/Doctor tabs
+- AI Brain #7: Message persistence (messages saved to Convex, reloaded on session resume)
+- AI Brain #8: Session history sidebar (list sessions, switch, new chat, archive)
 
 ## Key Architecture Decisions
 - Encrypted credentials: AES-256-GCM in Convex (src/lib/crypto.ts), NOT env vars per-site
@@ -48,9 +43,13 @@ Generated: 2026-02-21 (Session 3 — AI Brain)
 - API discovery: fetches /wp-json/ root, maps namespaces to friendly labels + categories
 - Convex actions for external API calls (cPanel, WP REST), mutations for DB writes
 - AI Brain uses Vercel AI SDK v5 with `streamText` + `toUIMessageStreamResponse()`
-- System prompt is dynamically built from site context + persistent memories
+- System prompt dynamically built from site context + persistent memories
 - AI chat uses `useChat` from `@ai-sdk/react` with `DefaultChatTransport`
 - Messages use `.parts` array (v5 format), NOT `.content` string
+- Session selection uses 3-state: undefined (loading) → null (new chat) → Id (specific session)
+- Mode switch uses separate useEffect: reset to undefined on mode change, resolve on latestSession change
+- useEffect depends on `latestSession` object (not `latestSession?._id`) to detect null resolution
+- `sessionIdRef` used in onFinish to avoid stale closure capturing initial null sessionId
 
 ## Environment & Credentials
 - Convex dev: precious-perch-420 (local dev)
@@ -59,3 +58,4 @@ Generated: 2026-02-21 (Session 3 — AI Brain)
 - Vercel env vars: NEXT_PUBLIC_CONVEX_URL, NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY, ENCRYPTION_SECRET, ANTHROPIC_API_KEY — all set for production
 - JWT template "convex" verified in Clerk dashboard
 - Anthropic API key name: "WP Pilot" (created via Playwright on platform.claude.com)
+- WP Pilot runs on port 3001 (port 3000 used by expense-tracker)
