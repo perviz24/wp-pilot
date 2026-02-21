@@ -63,20 +63,63 @@ export function FileBrowser({ siteId }: { siteId: Id<"sites"> }) {
     setError(null);
     setErrorType(null);
     try {
+      // Try Convex action first (direct cPanel call from Convex cloud)
       const result: ListDirectoryResult = await listDir({ siteId, dir });
-      if (!result.ok) {
-        setError(result.error);
-        setErrorType(result.errorType);
+      if (result.ok) {
+        setFiles(result.files);
+        setCurrentDir(result.currentDir);
+        setLoaded(true);
         return;
       }
-      setFiles(result.files);
-      setCurrentDir(result.currentDir);
-      setLoaded(true);
+
+      // If blocked by firewall, retry via Vercel API route (different IPs)
+      if (result.errorType === "firewall") {
+        const proxyResult = await fetchViaProxy(siteId, dir);
+        if (proxyResult.ok) {
+          setFiles(proxyResult.files);
+          setCurrentDir(proxyResult.currentDir);
+          setLoaded(true);
+          return;
+        }
+        // Both methods failed
+        setError(proxyResult.error);
+        setErrorType(proxyResult.errorType);
+        return;
+      }
+
+      // Non-firewall error — show directly
+      setError(result.error);
+      setErrorType(result.errorType);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to list files");
       setErrorType("connection");
     } finally {
       setLoading(false);
+    }
+  };
+
+  /** Fallback: call cPanel via Vercel API route (different IP from Convex) */
+  const fetchViaProxy = async (
+    sid: Id<"sites">,
+    dir: string,
+  ): Promise<ListDirectoryResult> => {
+    try {
+      const res = await fetch("/api/cpanel/list-files", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ siteId: sid, dir }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        return { ok: true, files: data.files, currentDir: data.currentDir };
+      }
+      return { ok: false, error: data.error ?? "Proxy request failed", errorType: data.errorType ?? "api" };
+    } catch (e) {
+      return {
+        ok: false,
+        error: `Proxy fallback failed: ${e instanceof Error ? e.message : String(e)}`,
+        errorType: "connection",
+      };
     }
   };
 

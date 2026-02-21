@@ -29,6 +29,7 @@ export interface CpanelCredentials {
 /** Site record shape (subset we need for tools) */
 export interface SiteRecord {
   _id: Id<"sites">;
+  userId: string;
   name: string;
   url: string;
   cpanelHost?: string;
