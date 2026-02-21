@@ -92,8 +92,20 @@ export async function POST(req: Request) {
       return Response.json({ ok: true, files, currentDir: dir, via: "vercel-proxy" });
     }
 
-    // Only retry on firewall/connection errors, not auth/API errors
-    if (!result.isFirewall && result.errorType !== "connection") {
+    // Short-circuit on Imunify360 — all URLs will hit the same IP block
+    if (result.isFirewall) {
+      return Response.json({
+        ok: false,
+        error:
+          "Imunify360 is blocking Vercel's servers from accessing cPanel. " +
+          "Ask misshosting support to whitelist Vercel's IP ranges for your cPanel account, " +
+          "or enable 'API Token' access bypass in Imunify360 settings.",
+        errorType: "firewall",
+      });
+    }
+
+    // Only retry on connection errors, not auth/API errors
+    if (result.errorType !== "connection") {
       return Response.json({
         ok: false,
         error: `cPanel API error: ${result.error}`,
@@ -102,13 +114,13 @@ export async function POST(req: Request) {
     }
   }
 
-  // All URLs failed
+  // All connection attempts failed
   return Response.json({
     ok: false,
     error:
-      "cPanel API blocked on all connection methods (via Vercel proxy). " +
-      "Contact your hosting provider to whitelist API access.",
-    errorType: "firewall",
+      "Could not connect to cPanel on any endpoint. " +
+      "Check that the host and port are correct.",
+    errorType: "connection",
   });
 }
 
