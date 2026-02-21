@@ -22,8 +22,6 @@ export async function wpFetch(
     "Content-Type": "application/json",
   };
 
-  console.log(`[wpFetch] ${options.method ?? "GET"} ${url} (baseUrl=${baseUrl})`);
-
   const response = await fetch(url, {
     method: options.method ?? "GET",
     headers,
@@ -31,8 +29,6 @@ export async function wpFetch(
   });
 
   const data = await response.json().catch(() => null);
-  console.log(`[wpFetch] Response: ${response.status} ${response.ok ? "OK" : "FAIL"}`,
-    !response.ok ? JSON.stringify(data)?.slice(0, 200) : "");
   return { ok: response.ok, status: response.status, data };
 }
 
@@ -52,18 +48,12 @@ export async function getWpContext(
   }
   const site = await getSiteRecord(ctx.siteId as Id<"sites">, ctx.convexToken);
   if (!site) {
-    console.log("[getWpContext] Site not found for siteId:", ctx.siteId);
     return { error: "Site not found." };
   }
-
-  console.log("[getWpContext] Site found:", site.name, "wpRestConnected:", site.wpRestConnected,
-    "hasUrl:", !!site.wpRestUrl, "hasUser:", !!site.wpUsername, "hasPwd:", !!site.wpAppPassword);
 
   const creds = getWpRestCredentials(site);
   if (!creds) {
     return { error: "WP REST API not connected. Ask the user to configure WordPress credentials first." };
   }
-
-  console.log("[getWpContext] Credentials extracted, url:", creds.url, "user:", creds.username);
   return { site, creds, authHeader: buildWpAuthHeader(creds) };
 }

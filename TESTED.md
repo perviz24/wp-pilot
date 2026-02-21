@@ -23,7 +23,7 @@ Playwright MCP automation on localhost:3001
 - Clerk dev mode warning (expected, non-blocking)
 - Zero app-level errors across all tested pages
 
-## Current Issue: AI Brain WP REST API Authentication Failure
+## Resolved: AI Brain WP REST API Authentication Failure
 
 ### Diagnosis
 
@@ -33,12 +33,18 @@ Playwright MCP automation on localhost:3001
 | 2 | Credentials not in Convex | Checked prod Convex via system prompt | wpRestConnected=true, fields present | ❌ Not the cause |
 | 3 | Double /wp-json/ in URL | Read wpFetch code + stored wpRestUrl | URL was `.../wp-json/wp-json/...` | ✅ FIXED (7b7c89c) |
 | 4 | Fix not deployed / cached | Deployed with --force, retested | AI still reports auth error | ⚠️ Insufficient |
-| 5 | WP blocking Vercel IPs | Direct curl=200, Vercel function fails | Adding diagnostic logs | 🔍 Investigating |
-| 6 | Convex fetchQuery failure | getWpContext may not find site | Adding console.log | 🔍 Investigating |
+| 5 | WP blocking Vercel IPs | Debug route from Vercel → 200 OK | Vercel IPs NOT blocked | ❌ Not the cause |
+| 6 | Wrong WP username in Convex | Debug route: wpUsername="WP-pilot" → 401 | User entered app password NAME as username | ✅ ROOT CAUSE |
 
-**Classification**: Infrastructure / Auth — blocks all WP REST tools in AI Brain
-**Direct curl**: ✅ Works (200 OK with actual page data)
-**Through pipeline**: ❌ Fails ("authentication error")
+### Root Cause
+User entered "WP-pilot" (the Application Password label) as the WordPress username instead of "academy.geniusmotion.se" (actual WP username). WordPress returned 401 `invalid_username`.
+
+### Fix
+1. Code fix: Strip double /wp-json/ in wpFetch URL construction (7b7c89c)
+2. Data fix: User updated credentials in WP Pilot Settings page
+
+### Verification
+AI Brain → "List all my WordPress pages" → ✅ 200 OK → 16 pages returned with titles, URLs, statuses
 
 ## Limitations
 - Cannot test authenticated user flows (sign-in password entry prohibited)
