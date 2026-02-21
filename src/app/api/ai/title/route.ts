@@ -27,7 +27,7 @@ export async function POST(req: Request) {
 
   try {
     const { text } = await generateText({
-      model: anthropic("claude-3-5-haiku-20241022"),
+      model: anthropic("claude-sonnet-4-20250514"),
       maxOutputTokens: 30,
       system: `Generate a concise 3-6 word title for this conversation.
 Rules:
