@@ -17,6 +17,7 @@
  *   GET  /wp-json/wp-pilot/v1/page-structure/{post_id}               — hierarchical layout
  *   POST /wp-json/wp-pilot/v1/clone-page                             — clone page as draft
  *   GET  /wp-json/wp-pilot/v1/files?path=public_html                 — PHP filesystem bridge
+ *   POST /wp-json/wp-pilot/v1/backup                                  — cPanel backup via PHP proxy
  *
  * Security: All endpoints require edit_posts capability (Application Password auth).
  */
@@ -99,6 +100,21 @@ add_action( 'rest_api_init', function() {
                 'sanitize_callback' => 'sanitize_text_field',
             ),
         ),
+    ) );
+
+    // ═══════════════════════════════════════════════════════
+    // cPANEL BACKUP BRIDGE (v2 — proxies via PHP to bypass Imunify360)
+    // ═══════════════════════════════════════════════════════
+
+    // POST — Trigger a cPanel full backup via PHP server-side proxy.
+    // The request to cPanel originates from the hosting server's own IP,
+    // so Imunify360 will not block it (only blocks external/cloud IPs).
+    register_rest_route( 'wp-pilot/v1', '/backup', array(
+        'methods'             => 'POST',
+        'callback'            => 'wppilot_trigger_backup',
+        'permission_callback' => function() {
+            return current_user_can( 'edit_posts' );
+        },
     ) );
 
 } );
@@ -464,6 +480,78 @@ function wppilot_list_files( WP_REST_Request $request ) {
         'files' => $files,
     ) );
 }
+
+// ═══════════════════════════════════════════════════════════
+// cPANEL BACKUP BRIDGE HANDLER (v2)
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * Proxy a cPanel full-backup request from the hosting server itself.
+ * Because PHP runs on the same server, the request originates from a
+ * local/server IP that Imunify360 trusts — bypassing cloud IP blocks.
+ *
+ * Expects JSON body: { cpanel_host, cpanel_port, cpanel_username, cpanel_token }
+ */
+function wppilot_trigger_backup( WP_REST_Request $request ) {
+    $body = $request->get_json_params();
+
+    $host     = isset( $body['cpanel_host'] )     ? sanitize_text_field( $body['cpanel_host'] )     : '';
+    $port     = isset( $body['cpanel_port'] )      ? (int) $body['cpanel_port']                      : 2083;
+    $username = isset( $body['cpanel_username'] )  ? sanitize_text_field( $body['cpanel_username'] )  : '';
+    $token    = isset( $body['cpanel_token'] )     ? sanitize_text_field( $body['cpanel_token'] )     : '';
+
+    if ( empty( $host ) || empty( $username ) || empty( $token ) ) {
+        return new WP_Error(
+            'missing_credentials',
+            'cpanel_host, cpanel_username, and cpanel_token are required.',
+            array( 'status' => 400 )
+        );
+    }
+
+    if ( $port < 1 || $port > 65535 ) {
+        $port = 2083;
+    }
+
+    $url = "https://{$host}:{$port}/execute/Backup/fullbackup_to_homedir";
+
+    $response = wp_remote_post( $url, array(
+        'timeout'   => 60,
+        'sslverify' => false, // cPanel on shared hosting often uses self-signed certs
+        'headers'   => array(
+            'Authorization' => "cpanel {$username}:{$token}",
+            'Content-Type'  => 'application/x-www-form-urlencoded',
+        ),
+        'body' => '',
+    ) );
+
+    if ( is_wp_error( $response ) ) {
+        return new WP_Error(
+            'cpanel_connection_error',
+            'Could not reach cPanel: ' . $response->get_error_message(),
+            array( 'status' => 502 )
+        );
+    }
+
+    $http_code = wp_remote_retrieve_response_code( $response );
+    $raw_body  = wp_remote_retrieve_body( $response );
+
+    if ( $http_code < 200 || $http_code >= 300 ) {
+        return new WP_Error(
+            'cpanel_http_error',
+            "cPanel returned HTTP {$http_code}",
+            array( 'status' => 502, 'cpanel_status' => $http_code, 'cpanel_body' => $raw_body )
+        );
+    }
+
+    $data = json_decode( $raw_body, true );
+
+    return rest_ensure_response( array(
+        'ok'            => true,
+        'cpanel_status' => $http_code,
+        'result'        => is_array( $data ) ? $data : $raw_body,
+    ) );
+}
+
 
 /** Human-readable file size (matches cPanel humansize format) */
 function wppilot_format_bytes( $bytes ) {

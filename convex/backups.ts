@@ -99,7 +99,77 @@ export const logAudit = mutation({
   },
 });
 
+/**
+ * Try to trigger a cPanel backup via the WP PHP bridge.
+ * PHP runs on the same hosting server, so requests to cPanel come from
+ * a local IP that Imunify360 trusts — bypassing cloud IP blocks.
+ * Returns the parsed cPanel response, or null if bridge is unavailable.
+ */
+async function attemptWpBackupBridge(
+  wpRestUrl: string,
+  wpUsername: string,
+  wpAppPassword: string,
+  cpanelHost: string,
+  cpanelPort: number,
+  cpanelUsername: string,
+  cpanelToken: string,
+): Promise<{ ok: boolean; pid?: string; error?: string } | null> {
+  const base = wpRestUrl.replace(/\/wp-json\/?$/, "").replace(/\/$/, "");
+  const url = `${base}/wp-json/wp-pilot/v1/backup`;
+  const credentials = btoa(`${wpUsername}:${wpAppPassword}`);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        cpanel_host: cpanelHost,
+        cpanel_port: cpanelPort,
+        cpanel_username: cpanelUsername,
+        cpanel_token: cpanelToken,
+      }),
+    });
+  } catch {
+    return null; // Network error — bridge unavailable
+  }
+
+  if (!response.ok) {
+    // Bridge returned an error — try to parse it
+    let errBody = "";
+    try { errBody = await response.text(); } catch { /* ignore */ }
+    // If 404, endpoint not installed — return null to fall through
+    if (response.status === 404) return null;
+    return { ok: false, error: `WP bridge HTTP ${response.status}: ${errBody.slice(0, 200)}` };
+  }
+
+  let data: Record<string, unknown>;
+  try { data = await response.json(); } catch { return null; }
+
+  if (!data?.ok) {
+    return { ok: false, error: String(data?.message ?? "Bridge returned not ok") };
+  }
+
+  // Parse the nested cPanel result from the bridge response
+  const cpResult = data.result as Record<string, unknown> | undefined;
+  if (cpResult?.result === 1 || cpResult?.status === 1) {
+    const pid = (cpResult?.data as Record<string, unknown>)?.pid;
+    return { ok: true, pid: pid ? String(pid) : undefined };
+  }
+
+  // cPanel reported failure through the bridge
+  const cpErrors = cpResult?.errors as string[] | undefined;
+  const cpMessages = cpResult?.messages as string[] | undefined;
+  const errMsg = cpErrors?.join(", ") ?? cpMessages?.join(", ") ?? "Backup request failed via bridge";
+  return { ok: false, error: errMsg };
+}
+
 // Action: call cPanel UAPI to trigger full backup
+// Priority: WP PHP bridge first (bypasses Imunify360), then cPanel direct
 export const triggerCpanelBackup = action({
   args: { siteId: v.id("sites") },
   handler: async (ctx, args): Promise<{ success: boolean; backupId: string }> => {
@@ -142,9 +212,48 @@ export const triggerCpanelBackup = action({
     });
 
     const port = site.cpanelPort ?? 2083;
-    const url = `https://${site.cpanelHost}:${port}/execute/Backup/fullbackup_to_homedir`;
 
     try {
+      // ── Priority 1: WP PHP bridge (bypasses Imunify360) ──
+      if (site.wpRestUrl && site.wpUsername && site.wpAppPassword) {
+        const bridgeResult = await attemptWpBackupBridge(
+          site.wpRestUrl,
+          site.wpUsername,
+          site.wpAppPassword,
+          site.cpanelHost,
+          port,
+          site.cpanelUsername,
+          site.cpanelToken,
+        );
+
+        if (bridgeResult !== null) {
+          if (bridgeResult.ok) {
+            await ctx.runMutation(api.backups.updateBackupStatus, {
+              backupId,
+              status: "completed",
+              filename: bridgeResult.pid
+                ? `backup-pid-${bridgeResult.pid}`
+                : "backup-pending",
+            });
+            await ctx.runMutation(api.backups.logAudit, {
+              siteId: args.siteId,
+              action: "Create full backup",
+              layer: "wp-rest",
+              riskLevel: "medium",
+              details: `Backup triggered via WP bridge, PID: ${bridgeResult.pid ?? "unknown"}`,
+              success: true,
+            });
+            return { success: true, backupId };
+          }
+          // Bridge returned an error (not null = bridge is installed but cPanel failed)
+          throw new Error(bridgeResult.error ?? "Backup failed via WP bridge");
+        }
+        // bridgeResult === null → bridge not available, fall through to direct
+      }
+
+      // ── Priority 2: cPanel direct (fallback) ──
+      const url = `https://${site.cpanelHost}:${port}/execute/Backup/fullbackup_to_homedir`;
+
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -182,7 +291,7 @@ export const triggerCpanelBackup = action({
         action: "Create full backup",
         layer: "cpanel",
         riskLevel: "medium",
-        details: `Backup triggered via UAPI, PID: ${data?.data?.pid ?? "unknown"}`,
+        details: `Backup triggered via UAPI direct, PID: ${data?.data?.pid ?? "unknown"}`,
         success: true,
       });
 
