@@ -1,29 +1,29 @@
 # HANDOFF — WP Pilot
-Generated: 2026-02-21 (Session 4 — AI Brain persistence + sessions)
+Generated: 2026-02-21 (Session 5 — AI Memory Tool)
 
 ## What Was Built This Session
-- AI Brain Feature #7: Message persistence (save/load to Convex aiMessages) — working
-- AI Brain Feature #8: Session history sidebar (list, switch, new chat, archive) — working
-- Bug fix: stale closure in onFinish causing messages to not persist — fixed
-- Bug fix: mode switch showing stale Builder messages in Doctor tab — fixed (useEffect dependency)
+- AI Brain Feature #9: Memory upsert from AI — working, tested on production
+  - AI can save site learnings (theme, plugins, preferences, warnings) to Convex during conversations
+  - Memories persist across sessions — verified in new chat: AI recalled Flavor theme + WooCommerce
+  - Uses Vercel AI SDK v5 `tool()` with `inputSchema` (Zod) + server-side `fetchMutation`
+- Self-audit of Session 4: scored 8/12, logged violations to Memory MCP
 
 ## Current State
 - Live URL: https://wp-pilot-one.vercel.app
-- Last commit: 07717e7 chore: fix useEffect dependency for mode switch resolution
+- Last commit: eb98179 chore: add AI memory tool for persistent site learnings
 - Git: all committed and pushed, branch up to date
 - Known issues: none — all features tested on production with 0 console errors
-- AI Brain: both Builder and Doctor modes work correctly
+- AI Brain: Builder and Doctor modes work correctly
+- Memory system: AI proactively saves site facts during conversation, recalled in new sessions
 - Session sidebar: opens from History button, shows session list, New Chat, Archive
-- Mode switching: correctly resets state between Builder/Doctor
 
 ## Next Steps (priority order)
-1. **Memory upsert from AI** — let AI save learnings to aiSiteMemory during conversations
-2. **Connect API layers** — wire cPanel/WP REST/WP Admin credentials to AI actions
-3. **AI action execution** — let AI trigger real WordPress operations (create pages, install plugins, etc.)
-4. **Session title auto-generation** — use AI to generate session titles from first message
-5. **Upgrade to Clerk production** when ready for real users
+1. **Connect API layers** — wire cPanel/WP REST/WP Admin credentials to AI actions
+2. **AI action execution** — let AI trigger real WordPress operations (create pages, install plugins, etc.)
+3. **Session title auto-generation** — use AI to generate session titles from first message
+4. **Upgrade to Clerk production** when ready for real users
 
-## Previous Session Features (all working)
+## All Features (all working)
 - Feature 1: Clerk auth + Convex integration + dashboard layout
 - Feature 2: Site wizard with 3 credential types (cPanel, WP REST, WP Admin)
 - Feature 3: cPanel backup trigger via UAPI
@@ -35,6 +35,7 @@ Generated: 2026-02-21 (Session 4 — AI Brain persistence + sessions)
 - AI Brain #1-6: Schema, Convex functions, system prompt, API route, chat UI, Builder/Doctor tabs
 - AI Brain #7: Message persistence (messages saved to Convex, reloaded on session resume)
 - AI Brain #8: Session history sidebar (list sessions, switch, new chat, archive)
+- AI Brain #9: Memory upsert tool — AI saves site learnings via save_memory tool during conversations
 
 ## Key Architecture Decisions
 - Encrypted credentials: AES-256-GCM in Convex (src/lib/crypto.ts), NOT env vars per-site
@@ -50,6 +51,10 @@ Generated: 2026-02-21 (Session 4 — AI Brain persistence + sessions)
 - Mode switch uses separate useEffect: reset to undefined on mode change, resolve on latestSession change
 - useEffect depends on `latestSession` object (not `latestSession?._id`) to detect null resolution
 - `sessionIdRef` used in onFinish to avoid stale closure capturing initial null sessionId
+- AI tools: Vercel AI SDK v5 `tool()` uses `inputSchema` (Zod), NOT `parameters`
+- Server-side Convex from API routes: `fetchMutation` from `convex/nextjs` with `{ token }` from Clerk
+- Clerk JWT for server-side: `auth().getToken({ template: "convex" })` via `src/lib/convex-auth.ts`
+- Multi-step tool calling: `stopWhen: stepCountIs(3)` lets AI continue text after tool use
 
 ## Environment & Credentials
 - Convex dev: precious-perch-420 (local dev)
