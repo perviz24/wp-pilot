@@ -1,29 +1,37 @@
 # HANDOFF — WP Pilot
-Generated: 2026-02-21 (Session 11 — Bug Fixes: Chat Scroll + Unicode Encoding)
+Generated: 2026-02-21 (Session 12 — cPanel 415 Fix Investigation)
 
-## What Was Fixed This Session
-- **Chat scroll bug**: AI chat messages couldn't be scrolled — replaced Radix ScrollArea with native div + overflow-y-auto. Verified on production (scrollHeight 4839 > clientHeight 590).
-- **Unicode encoding bug**: Swedish characters (ö, ä, å) displayed as u00f6, u00e4, u00e5 on cloned page previews. Root cause: WordPress `stripslashes_deep()` strips backslashes from JSON Unicode escapes. Fix: wrap values in `wp_slash()` before `update_post_meta()`. Verified by cloning homepage — all 55 widgets with correct Swedish chars.
-- **PHP Code Snippet updated**: Snippet ID 25 on WordPress updated with wp_slash fix via Playwright automation.
-- **Cleanup**: Deleted old broken test clones (2295, 2296), test clone (2299), temp-snippet-setter.js, revoked temporary Application Password.
+## What Was Done This Session
+- **Root cause of cPanel 415 found**: misshosting uses an OpenResty reverse proxy in front of cPanel. This proxy requires `Accept: text/html` in the request or it returns HTTP 415 for ALL requests — regardless of Content-Type or HTTP method. Confirmed via PowerShell WebRequest testing.
+- **Accept header fix applied**: Updated both `cpanel-tools.ts` and `list-files/route.ts` to send `Accept: application/json,text/html`. Including `application/json` makes cPanel itself respond with JSON instead of an HTML page (both headers are needed).
+- **Imunify360 block identified**: After fixing the 415, requests now get through to cPanel but Imunify360 bot-protection blocks Vercel's server IPs. cPanel responds: `{"message": "Access denied by Imunify360 bot-protection. IPs used for automation should be whitelisted"}`. This is a **hosting configuration issue**, not a code bug.
+- **Error handling improved**: `list-files/route.ts` now short-circuits immediately on Imunify360 (no point retrying 3 URLs when all share the same blocked IPs) and shows a specific actionable error.
+- Commits: `9c96c7b`, `5b1748d`, `614256f` — all pushed and deployed.
 
 ## Current State
 - Live URL: https://wp-pilot-one.vercel.app
-- Last commit: 5d09f00 fix: chat scroll + Unicode encoding in page clone
+- Last commit: 614256f fix: short-circuit on Imunify360 block with actionable error message
 - Git: all committed and pushed, branch up to date
-- **BLOCKING ISSUE**: Anthropic API key is out of credits — AI Brain chat is non-functional
-  - Error: "Your credit balance is too low to access the Anthropic API"
+- **BLOCKING ISSUE #1**: Imunify360 on misshosting blocks Vercel's IPs — cPanel file browser and backup tool are non-functional until hosting resolves
+  - Fix: Email misshosting support asking them to whitelist Vercel's IP ranges for cPanel API access on your account
+  - Alternative: Ask if Imunify360 has an "API Token bypass" setting for whitelisted tokens
+- **BLOCKING ISSUE #2**: Anthropic API key is out of credits — AI Brain chat is non-functional
   - Fix: Add credits at https://console.anthropic.com/settings/billing
-- Known issues: cPanel API blocked by hosting WAF (Imunify360) — unchanged
-- AI Brain: All 23 tools defined but chat non-functional until API credits added
-- Zero console errors on live URL (UI loads fine, only AI chat calls fail)
+- Zero console errors on live URL
+
+## What Misshosting Needs To Do
+Send this to misshosting support:
+
+> "I am using the cPanel UAPI from a cloud application hosted on Vercel. The requests use a valid API token (`Authorization: cpanel username:TOKEN`) and POST with `Content-Type: application/x-www-form-urlencoded`. However, Imunify360 is blocking all requests from Vercel's server IPs with: 'Access denied by Imunify360 bot-protection. IPs used for automation should be whitelisted.'
+>
+> Please whitelist Vercel's outgoing IP ranges for cPanel API access on my account (cpsrv50.misshosting.com:2083), or advise how to configure Imunify360 to allow API token-based requests from automated systems."
 
 ## Next Steps (priority order)
-1. **Add Anthropic API credits** — AI chat feature is completely broken without them
-2. **Build whole new pages** — extend clone workflow to create pages from scratch
-3. **Polish UI** — markdown rendering in chat, better tool result display
-4. **Add more sites** — knowledge system becomes more valuable with each site
-5. **Await hosting response** — cPanel API whitelist for Vercel IPs
+1. **Add Anthropic API credits** — AI chat feature completely broken without them
+2. **Contact misshosting** — request Imunify360 whitelist for Vercel IPs (see message above)
+3. **Build whole new pages** — extend clone workflow to create pages from scratch
+4. **Polish UI** — markdown rendering in chat, better tool result display
+5. **Add more sites** — knowledge system becomes more valuable with each site
 6. **Upgrade to Clerk production** when ready for real users
 
 ## All Features (23 AI tools + app features)
@@ -49,12 +57,15 @@ Generated: 2026-02-21 (Session 11 — Bug Fixes: Chat Scroll + Unicode Encoding)
 - Feature #21: Page clone tool — clone any Elementor page as safe draft for testing improvements
 
 ## Key Architecture Decisions
+- **cPanel Accept header**: MUST send `Accept: application/json,text/html` — OpenResty proxy requires `text/html` or returns 415, and `application/json` makes cPanel respond with JSON not HTML page
+- **cPanel auth format**: `cpanel username:APITOKEN` (NOT Basic auth, NOT Bearer)
+- **Imunify360 block**: Happens at IP level before auth — valid tokens still get blocked. Needs hosting whitelist.
 - **wp_slash() fix**: MUST wrap values in wp_slash() before update_post_meta() when copying JSON data containing Unicode escapes — WordPress stripslashes_deep() otherwise mangles them
 - **Native scroll > Radix ScrollArea**: In flex layouts, Radix ScrollArea expands to content height. Use native div with overflow-y-auto + min-h-0 on flex parent instead
 - **Clone workflow**: Clone page as draft, audit structure, improve widgets, preview via ?page_id=X&preview=true, live page never touched
 - **PHP Code Snippet v2**: All 4 endpoints in single Code Snippets plugin entry (ID 25), not mu-plugins
 - **3-layer knowledge architecture**: Layer 1 (global), Layer 2 (cross-site patterns), Layer 3 (per-site memories)
-- **3-layer site access**: Layer 1 (WP REST), Layer 2 (cPanel — blocked), Layer 3 (Custom Elementor REST)
+- **3-layer site access**: Layer 1 (WP REST), Layer 2 (cPanel — blocked by Imunify360), Layer 3 (Custom Elementor REST)
 - Encrypted credentials: AES-256-GCM in Convex, NOT env vars per-site
 - AI Brain uses Vercel AI SDK v6 with `streamText` + `toUIMessageStreamResponse()`
 - Modular tools: src/lib/ai/tools/index.ts assembles 8 modules
@@ -70,6 +81,6 @@ Generated: 2026-02-21 (Session 11 — Bug Fixes: Chat Scroll + Unicode Encoding)
 - WP Pilot runs on port 3001 (port 3000 used by expense-tracker)
 - WordPress site: academy.geniusmotion.se
 - WordPress Application Password: "WP-pilot" (UUID: a51e705e, stored encrypted in Convex production)
-- cPanel host: cpsrv50.misshosting.com:2083 (BLOCKED by WAF)
+- cPanel host: cpsrv50.misshosting.com:2083 (BLOCKED by Imunify360 — awaiting hosting whitelist)
 - Code Snippet: "WP Pilot Elementor API" (ID 25), v2 with 4 endpoints, scope "Run everywhere"
 - WordPress login: perviz20@yahoo.com
