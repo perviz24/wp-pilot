@@ -8,7 +8,8 @@ import { api } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { ScrollArea } from "@/components/ui/scroll-area";
+// Using native scroll div instead of ScrollArea — radix ScrollArea expands
+// to content height inside flex layouts, breaking scroll containment
 import { AiMessage } from "./ai-message";
 import { Send, Square, Loader2, Brain } from "lucide-react";
 
@@ -194,8 +195,8 @@ export function AiChat({
 
   return (
     <div className="flex h-full flex-col">
-      {/* Messages area */}
-      <ScrollArea className="flex-1 px-4" ref={scrollRef}>
+      {/* Messages area — native scroll div (ScrollArea breaks in flex layouts) */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-4" ref={scrollRef}>
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center py-20 text-center">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
@@ -224,7 +225,7 @@ export function AiChat({
             )}
           </div>
         )}
-      </ScrollArea>
+      </div>
 
       {/* Error display */}
       {error && (

@@ -246,7 +246,7 @@ export default function AiBrainPage() {
       </div>
 
       {/* Chat area — key uses stable counter, only changes on explicit user actions */}
-      <div className="flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1">
         <AiChat
           key={`${mode}-${chatInstanceId}`}
           systemPrompt={systemPrompt}

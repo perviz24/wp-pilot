@@ -82,7 +82,9 @@ function wppilot_clone_page( WP_REST_Request \\$request ) {
     foreach ( \\$meta_keys as \\$key ) {
         \\$value = get_post_meta( \\$source_id, \\$key, true );
         if ( ! empty( \\$value ) ) {
-            update_post_meta( \\$new_id, \\$key, \\$value );
+            // wp_slash preserves JSON Unicode escapes (\\u00f6 → ö) that
+            // WordPress stripslashes_deep would otherwise mangle
+            update_post_meta( \\$new_id, \\$key, wp_slash( \\$value ) );
         }
     }
 
