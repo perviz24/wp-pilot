@@ -16,6 +16,7 @@ export const NEXT_PUBLIC_CONVEX_URL = requireEnv("NEXT_PUBLIC_CONVEX_URL");
 
 // Server-only
 export const getEncryptionSecret = () => requireEnv("ENCRYPTION_SECRET");
+export const getAnthropicApiKey = () => requireEnv("ANTHROPIC_API_KEY");
 
 // Clerk (auto-loaded by @clerk/nextjs, but validated here)
 export const NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY = requireEnv(
