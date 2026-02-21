@@ -57,41 +57,51 @@ export function AiChat({
   const updateTitle = useMutation(api.aiSessions.updateTitle);
 
   // Save assistant message when streaming finishes
+  // Wrapped in try/catch — unhandled errors here can prevent useChat status from
+  // transitioning back to "ready", leaving the send button permanently disabled
   const handleFinish = useCallback(
     async ({ message }: { message: UIMessage }) => {
-      const currentSessionId = sessionIdRef.current;
-      if (!currentSessionId) return;
-      const text = getMessageText(message);
-      if (!text) return;
+      try {
+        const currentSessionId = sessionIdRef.current;
+        if (!currentSessionId) return;
+        const text = getMessageText(message);
+        if (!text) return;
 
-      await addMessage({
-        sessionId: currentSessionId,
-        role: "assistant",
-        content: text,
-      });
-      await incrementCount({ sessionId: currentSessionId });
+        await addMessage({
+          sessionId: currentSessionId,
+          role: "assistant",
+          content: text,
+        });
+        await incrementCount({ sessionId: currentSessionId });
 
-      // Auto-generate a smart title after the first assistant response
-      if (!titleGeneratedRef.current && firstUserMessageRef.current) {
-        titleGeneratedRef.current = true;
-        // Fire-and-forget — don't block the UI
-        fetch("/api/ai/title", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            userMessage: firstUserMessageRef.current,
-            assistantMessage: text.slice(0, 300),
-          }),
-        })
-          .then((res) => res.json())
-          .then((data: { title?: string }) => {
-            if (data?.title) {
-              updateTitle({ sessionId: currentSessionId, title: data.title });
-            }
+        // Auto-generate a smart title after the first assistant response
+        if (!titleGeneratedRef.current && firstUserMessageRef.current) {
+          titleGeneratedRef.current = true;
+          // Fire-and-forget — don't block the UI
+          fetch("/api/ai/title", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userMessage: firstUserMessageRef.current,
+              assistantMessage: text.slice(0, 300),
+            }),
           })
-          .catch(() => {
-            // Silent fail — title stays as truncated user message
-          });
+            .then((res) => res.json())
+            .then((data: { title?: string }) => {
+              if (data?.title) {
+                updateTitle({
+                  sessionId: currentSessionId,
+                  title: data.title,
+                });
+              }
+            })
+            .catch(() => {
+              // Silent fail — title stays as truncated user message
+            });
+        }
+      } catch (e) {
+        // Don't let persistence errors block the UI or prevent status transition
+        console.error("Failed to persist assistant message:", e);
       }
     },
     [addMessage, incrementCount, updateTitle],
@@ -104,18 +114,38 @@ export function AiChat({
     }),
     messages: initialMessages,
     onFinish: handleFinish,
+    onError: (err) => {
+      console.error("useChat stream error:", err);
+    },
   });
 
   const isLoading = status === "submitted" || status === "streaming";
 
-  // Safety timeout: if stream appears stuck for >150s, force-stop to unblock UI
-  // (Vercel maxDuration is 120s — if still "streaming" after 150s, connection dropped)
+  // Track last message update for stream inactivity detection
+  const lastActivityRef = useRef(Date.now());
+
+  // Reset activity timestamp whenever messages change during streaming
+  useEffect(() => {
+    if (isLoading) {
+      lastActivityRef.current = Date.now();
+    }
+  }, [messages, isLoading]);
+
+  // Two-tier stream safety: 15s inactivity detector + 135s absolute max
+  // Tier 1: if no new content arrives for 15s while streaming, stream likely dropped
+  // Tier 2: absolute 135s ceiling (server maxDuration is 120s)
   useEffect(() => {
     if (!isLoading) return;
-    const timer = setTimeout(() => {
-      stop();
-    }, 150_000);
-    return () => clearTimeout(timer);
+    const startTime = Date.now();
+    const interval = setInterval(() => {
+      const now = Date.now();
+      const inactiveMs = now - lastActivityRef.current;
+      const totalMs = now - startTime;
+      if (inactiveMs > 15_000 || totalMs > 135_000) {
+        stop();
+      }
+    }, 3_000);
+    return () => clearInterval(interval);
   }, [isLoading, stop]);
 
   // Auto-scroll to bottom on new messages
