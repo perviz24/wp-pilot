@@ -41,23 +41,39 @@ export const listDirectory = action({
     });
     const url = `https://${site.cpanelHost}:${port}/execute/Fileman/list_files?${params}`;
 
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `cpanel ${site.cpanelUsername}:${site.cpanelToken}`,
-      },
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "GET",
+        headers: {
+          Authorization: `cpanel ${site.cpanelUsername}:${site.cpanelToken}`,
+          Accept: "application/json",
+        },
+      });
+    } catch (fetchError) {
+      const msg = fetchError instanceof Error ? fetchError.message : String(fetchError);
+      throw new Error(`cPanel connection failed: ${msg}`);
+    }
 
     if (!response.ok) {
-      throw new Error(`cPanel API returned ${response.status}`);
+      const body = await response.text().catch(() => "");
+      throw new Error(
+        `cPanel API returned ${response.status}: ${body.slice(0, 200)}`
+      );
     }
 
-    const data = await response.json();
-
-    if (data?.errors?.length) {
-      throw new Error(data.errors.join(", "));
+    let data: Record<string, unknown>;
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error("cPanel returned non-JSON response");
     }
 
-    const rawFiles = data?.data ?? [];
+    if ((data?.errors as string[] | undefined)?.length) {
+      throw new Error((data.errors as string[]).join(", "));
+    }
+
+    const rawFiles = Array.isArray(data?.data) ? (data.data as Record<string, unknown>[]) : [];
     const files: CpanelFile[] = rawFiles.map(
       (f: Record<string, unknown>) => ({
         name: String(f.file ?? f.name ?? ""),
