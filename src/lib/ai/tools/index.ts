@@ -9,6 +9,7 @@ import { createWpRestReadTools } from "./wp-rest-read-tools";
 import { createWpRestWriteTools } from "./wp-rest-write-tools";
 import { createCpanelTools } from "./cpanel-tools";
 import { createElementorTools } from "./elementor-tools";
+import { createCloneTools } from "./clone-tools";
 import { createKnowledgeTools } from "./knowledge-tools";
 import { createResearchTools } from "./research-tools";
 
@@ -26,6 +27,7 @@ export function buildAiTools(ctx: ToolContext) {
     ...createWpRestWriteTools(ctx),
     ...createCpanelTools(ctx),
     ...createElementorTools(ctx),
+    ...createCloneTools(ctx),
   };
 }
 
