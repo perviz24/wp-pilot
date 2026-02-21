@@ -12,8 +12,10 @@ import type { Id } from "../../../../convex/_generated/dataModel";
 /**
  * Helper: make an authenticated cPanel UAPI call.
  * cPanel UAPI requires POST with application/x-www-form-urlencoded body.
- * Using GET or application/json causes HTTP 415 (Unsupported Media Type).
  * Auth format: "cpanel username:APITOKEN" (token-based, not Basic auth).
+ * CRITICAL: Must include "Accept: text/html" — the OpenResty reverse proxy
+ * in front of cPanel returns HTTP 415 for ALL requests without this header,
+ * regardless of Content-Type or HTTP method. Confirmed via curl testing.
  */
 async function cpanelFetch(
   host: string,
@@ -31,6 +33,7 @@ async function cpanelFetch(
     headers: {
       Authorization: authHeader,
       "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "text/html",
     },
     body,
   });

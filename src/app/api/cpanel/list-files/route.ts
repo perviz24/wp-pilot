@@ -1,8 +1,10 @@
 /**
  * Vercel API route proxy for cPanel file listing.
  * cPanel UAPI requires POST with Content-Type: application/x-www-form-urlencoded.
- * Using GET or application/json causes HTTP 415 (Unsupported Media Type).
  * Auth format: "cpanel username:APITOKEN" (not Basic auth).
+ * CRITICAL: Must include "Accept: text/html" — the OpenResty reverse proxy
+ * in front of cPanel returns HTTP 415 for ALL requests without this header,
+ * regardless of Content-Type or HTTP method. Confirmed via curl testing.
  */
 
 import { auth } from "@clerk/nextjs/server";
@@ -150,6 +152,7 @@ async function tryCpanelFetch(
       headers: {
         Authorization: authHeader,
         "Content-Type": "application/x-www-form-urlencoded",
+        Accept: "text/html",
       },
       body: formParams.toString(),
     });
