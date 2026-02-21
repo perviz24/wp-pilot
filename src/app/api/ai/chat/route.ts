@@ -42,7 +42,8 @@ export async function POST(req: Request) {
     model: anthropic("claude-sonnet-4-20250514"),
     system: system || "You are WP Pilot AI, a helpful WordPress site manager.",
     messages: await convertToModelMessages(messages),
-    stopWhen: stepCountIs(5), // Allow more steps for multi-tool workflows
+    // Doctor audits need ~5 tool calls + final text step. 8 gives room for complex workflows
+    stopWhen: stepCountIs(8),
     tools,
   });
 
