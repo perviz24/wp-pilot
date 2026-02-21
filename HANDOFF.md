@@ -1,34 +1,33 @@
 # HANDOFF — WP Pilot
-Generated: 2026-02-21 (Session 8 — 3-Layer Cross-Site Knowledge System)
+Generated: 2026-02-21 (Session 9 — Research Tools, Knowledge Orchestration, Stream Fixes)
 
 ## What Was Built This Session
-- **3-layer cross-site knowledge architecture**: Global knowledge (Layer 1), Pattern library (Layer 2), Site memory (Layer 3)
-- New Convex tables: `aiGlobalKnowledge` + `aiPatternLibrary` with indexes
-- New Convex functions: upsert, listAll, listApplicable, listByCategory for both tables
-- Auto-promotion logic: patterns with confidence >= 0.8 AND testedOn >= 3 sites promote to global
-- 3 new AI tools: `save_global_knowledge`, `save_pattern`, `read_knowledge` (merges all 3 layers)
-- System prompt builder updated to inject all 3 layers with token budget caps
-- Page.tsx wired to fetch and pass global knowledge + patterns to system prompt
-- Seed script with 10 global entries + 3 cross-site patterns (from Memory MCP analysis)
-- Seeded both dev and prod Convex deployments
+- **WordPress.org research tools**: `wp_search_plugins`, `wp_search_themes`, `wp_plugin_details` — 3 new AI tools for external plugin/theme research via public WordPress.org APIs
+- **Knowledge orchestration system prompt**: Builder 8-step workflow + Doctor 6-step systematic audit, both wired into the system prompt with smart decision logic for when to use internal knowledge vs external research
+- **Smart knowledge decision system**: Situational analysis table — AI evaluates each question to decide whether site memory, global knowledge, patterns, or external WordPress.org APIs are most valuable
+- **Stream reliability fixes** (3 bugs found and fixed during live testing):
+  - `maxDuration` increased 60→120s for multi-tool Doctor audits
+  - `stepCountIs` increased 5→8 so AI has room for tool calls + final text response
+  - Try/catch wrapper on `handleFinish` callback — Convex mutation errors were preventing useChat status from transitioning to "ready", leaving send button permanently disabled
+  - Smart two-tier stream timeout: 15s inactivity detector + 135s absolute max (replaces flat 150s)
+  - `onError` handler added to `useChat` for error visibility
 
 ## Current State
 - Live URL: https://wp-pilot-one.vercel.app
-- Last commit: db8072a feat: seed 10 global knowledge entries + 3 cross-site patterns
+- Last commit: 160082e fix: prevent stuck send button with try/catch onFinish + smart stream timeout
 - Git: all committed and pushed, branch up to date
-- Known issues: cPanel API blocked by hosting WAF (Imunify360) — unchanged from last session
-- AI Brain: All 18 tools working (15 original + 3 knowledge tools)
-- Knowledge system: 10 global entries + 3 patterns seeded in production
+- Known issues: cPanel API blocked by hosting WAF (Imunify360) — unchanged
+- AI Brain: All 21 tools working (18 original + 3 research tools)
+- Both Builder and Doctor modes tested and verified working on production
 - Zero console errors on live URL
 
 ## Next Steps (priority order)
-1. **Test knowledge tools live** — ask AI to use `read_knowledge` and `save_pattern` in a real conversation
-2. **Polish UI** — improve chat experience, add markdown rendering, better tool result display
-3. **Add more sites** — knowledge system becomes more valuable with each site added
-4. **Await hosting response** — cPanel API whitelist for Vercel IPs
-5. **Upgrade to Clerk production** when ready for real users
+1. **Polish UI** — improve chat experience, add markdown rendering, better tool result display
+2. **Add more sites** — knowledge system becomes more valuable with each site added
+3. **Await hosting response** — cPanel API whitelist for Vercel IPs
+4. **Upgrade to Clerk production** when ready for real users
 
-## All Features (18 AI tools + app features)
+## All Features (21 AI tools + app features)
 - Feature 1: Clerk auth + Convex integration + dashboard layout
 - Feature 2: Site wizard with 3 credential types (cPanel, WP REST, WP Admin)
 - Feature 3: cPanel backup trigger via UAPI
@@ -45,6 +44,8 @@ Generated: 2026-02-21 (Session 8 — 3-Layer Cross-Site Knowledge System)
 - Feature #13: Session title auto-generation — Sonnet 4 generates 3-6 word titles
 - Feature #14-16: Elementor tools — read widgets, update widget settings, setup API endpoint (with WAF fallback)
 - **Feature #17: 3-layer knowledge system** — global knowledge + pattern library + knowledge tools
+- **Feature #18: WordPress.org research tools** — plugin search, theme search, plugin details (public APIs)
+- **Feature #19: Knowledge orchestration** — smart system prompt with builder/doctor workflows + situational knowledge decision system
 
 ## Key Architecture Decisions
 - **3-layer knowledge architecture**: Layer 1 (aiGlobalKnowledge = universal truths), Layer 2 (aiPatternLibrary = cross-site patterns with confidence scoring), Layer 3 (aiSiteMemory = per-site memories)
@@ -59,13 +60,15 @@ Generated: 2026-02-21 (Session 8 — 3-Layer Cross-Site Knowledge System)
 - Audit logging: all actions across all layers log to auditLogs table with risk levels
 - API discovery: fetches /wp-json/ root, maps namespaces to friendly labels + categories
 - Convex actions for external API calls (cPanel, WP REST), mutations for DB writes
-- AI Brain uses Vercel AI SDK v6 with `streamText` + `toUIMessageStreamResponse()`
+- AI Brain uses Vercel AI SDK v6 (`ai@6.0.97`) with `streamText` + `toUIMessageStreamResponse()`
 - System prompt dynamically built from site context + persistent memories + global knowledge + patterns
 - AI tools: Vercel AI SDK `tool()` uses `inputSchema` (Zod), NOT `parameters`
-- Modular tools: src/lib/ai/tools/index.ts assembles 6 modules (memory, knowledge, wp-rest-read, wp-rest-write, cpanel, elementor)
+- Modular tools: src/lib/ai/tools/index.ts assembles 7 modules (memory, knowledge, research, wp-rest-read, wp-rest-write, cpanel, elementor)
 - **Elementor approach**: Custom REST endpoints via Code Snippets plugin (not mu-plugins), reads/writes _elementor_data post_meta
 - Title generation: separate /api/ai/title endpoint using Sonnet 4 (not Haiku — user preference)
-- Multi-step tool calling: `stopWhen: stepCountIs(5)` lets AI continue text after tool use
+- **Multi-step tool calling**: `stopWhen: stepCountIs(8)` — Doctor audits need ~5 tool calls + final text. `maxDuration: 120` for Vercel function timeout
+- **Stream resilience**: handleFinish wrapped in try/catch to prevent Convex mutation errors from blocking UI. Two-tier timeout: 15s inactivity + 135s absolute max
+- **Research tools**: WordPress.org public APIs (no auth), 10s timeout per request, registered as separate module in tools/index.ts
 
 ## Environment & Credentials
 - Convex dev: precious-perch-420 (local dev)
