@@ -40,6 +40,51 @@ export const deleteSite = mutation({
   },
 });
 
+export const updateSite = mutation({
+  args: {
+    siteId: v.id("sites"),
+    name: v.optional(v.string()),
+    url: v.optional(v.string()),
+    // cPanel credentials
+    cpanelHost: v.optional(v.string()),
+    cpanelPort: v.optional(v.number()),
+    cpanelUsername: v.optional(v.string()),
+    cpanelToken: v.optional(v.string()),
+    // WP REST API credentials
+    wpRestUrl: v.optional(v.string()),
+    wpUsername: v.optional(v.string()),
+    wpAppPassword: v.optional(v.string()),
+    // WP Admin credentials
+    wpAdminUser: v.optional(v.string()),
+    wpAdminPassword: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Not authenticated");
+    const site = await ctx.db.get(args.siteId);
+    if (!site || site.userId !== identity.subject) {
+      throw new Error("Site not found");
+    }
+
+    // Build update object — only include fields that were provided
+    const { siteId, ...fields } = args;
+    const update: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(fields)) {
+      if (value !== undefined) {
+        update[key] = value;
+      }
+    }
+
+    // Recalculate connection flags based on merged state
+    const merged = { ...site, ...update };
+    update.cpanelConnected = !!(merged.cpanelHost && merged.cpanelToken);
+    update.wpRestConnected = !!(merged.wpRestUrl && merged.wpAppPassword);
+    update.wpAdminConnected = !!(merged.wpAdminUser && merged.wpAdminPassword);
+
+    await ctx.db.patch(siteId, update);
+  },
+});
+
 export const addSite = mutation({
   args: {
     name: v.string(),

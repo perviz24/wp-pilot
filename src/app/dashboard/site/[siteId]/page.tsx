@@ -29,23 +29,14 @@ import {
   Puzzle,
   Loader2,
   Brain,
+  Settings,
 } from "lucide-react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { useState } from "react";
 import { LayerCard } from "@/components/layer-card";
 import { BackupHistory } from "@/components/backup-history";
-
-function formatDate(timestamp: number | undefined): string {
-  if (!timestamp) return "Never";
-  return new Date(timestamp).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+import { formatDate } from "@/lib/utils";
 
 export default function SiteDetailPage() {
   const params = useParams();
@@ -157,9 +148,17 @@ export default function SiteDetailPage() {
 
       {/* Connection layers */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Access Layers</CardTitle>
-          <CardDescription>Connected integration points for this site</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-base">Access Layers</CardTitle>
+            <CardDescription>Connected integration points for this site</CardDescription>
+          </div>
+          <Button variant="outline" size="sm" asChild>
+            <Link href={`/dashboard/site/${siteId}/settings`}>
+              <Settings className="mr-2 h-3.5 w-3.5" />
+              Edit
+            </Link>
+          </Button>
         </CardHeader>
         <CardContent className="space-y-2">
           <LayerCard
