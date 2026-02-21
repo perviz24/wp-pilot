@@ -7,10 +7,17 @@ import type { Id } from "../../../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Hammer, Stethoscope } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { ArrowLeft, Hammer, Stethoscope, History } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AiChat } from "@/components/ai/ai-chat";
+import { SessionSidebar } from "@/components/ai/session-sidebar";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
 import type { UIMessage } from "ai";
 
@@ -35,6 +42,12 @@ export default function AiBrainPage() {
   const params = useParams();
   const siteId = params.siteId as string;
   const [mode, setMode] = useState<"builder" | "doctor">("builder");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // null = "new chat" (no session selected), undefined = not yet initialized
+  const [selectedSessionId, setSelectedSessionId] = useState<
+    Id<"aiSessions"> | null | undefined
+  >(undefined);
 
   const site = useQuery(api.sites.getById, {
     siteId: siteId as Id<"sites">,
@@ -44,26 +57,30 @@ export default function AiBrainPage() {
     siteId: siteId as Id<"sites">,
   });
 
-  // Get latest active session for current mode
-  const activeSession = useQuery(api.aiSessions.getLatestActive, {
+  // Get latest active session to auto-select on first load
+  const latestSession = useQuery(api.aiSessions.getLatestActive, {
     siteId: siteId as Id<"sites">,
     mode,
   });
 
-  // Load messages for active session (skip if no session)
+  // Auto-select latest active session on first load or mode change
+  useEffect(() => {
+    if (latestSession === undefined) return; // still loading
+    setSelectedSessionId(latestSession?._id ?? null);
+  }, [latestSession?._id, mode]);
+
+  // Determine which session to load
+  const sessionToLoad = selectedSessionId ?? null;
+
+  // Load messages for selected session (skip if no session)
   const sessionMessages = useQuery(
     api.aiMessages.listBySession,
-    activeSession?._id
-      ? { sessionId: activeSession._id }
-      : "skip",
+    sessionToLoad ? { sessionId: sessionToLoad } : "skip",
   );
 
   // Wait for all data to load before rendering chat
-  // activeSession can be: undefined (loading), null (none found), or object (found)
-  // sessionMessages can be: undefined (loading/skipped), or array
-  const sessionLoading = activeSession === undefined;
-  const messagesLoading =
-    activeSession?._id && sessionMessages === undefined;
+  const sessionLoading = selectedSessionId === undefined;
+  const messagesLoading = sessionToLoad && sessionMessages === undefined;
   const isLoading =
     site === undefined ||
     memories === undefined ||
@@ -115,6 +132,14 @@ export default function AiBrainPage() {
       ? convertToUIMessages(sessionMessages)
       : undefined;
 
+  const handleNewChat = () => {
+    setSelectedSessionId(null);
+  };
+
+  const handleSelectSession = (sessionId: Id<"aiSessions">) => {
+    setSelectedSessionId(sessionId);
+  };
+
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
       {/* Header */}
@@ -125,6 +150,20 @@ export default function AiBrainPage() {
               <ArrowLeft className="h-4 w-4" />
             </Link>
           </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setSidebarOpen(true)}
+                >
+                  <History className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Chat history</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <div>
             <h1 className="text-lg font-semibold">AI Brain</h1>
             <p className="text-xs text-muted-foreground">{site.name}</p>
@@ -151,14 +190,25 @@ export default function AiBrainPage() {
       {/* Chat area — key forces remount when mode or session changes */}
       <div className="flex-1 overflow-hidden">
         <AiChat
-          key={`${mode}-${activeSession?._id ?? "new"}`}
+          key={`${mode}-${sessionToLoad ?? "new"}`}
           systemPrompt={systemPrompt}
           mode={mode}
           siteId={siteId as Id<"sites">}
-          sessionId={activeSession?._id ?? null}
+          sessionId={sessionToLoad}
           initialMessages={initialMessages}
         />
       </div>
+
+      {/* Session history sidebar */}
+      <SessionSidebar
+        open={sidebarOpen}
+        onOpenChange={setSidebarOpen}
+        siteId={siteId as Id<"sites">}
+        mode={mode}
+        activeSessionId={sessionToLoad}
+        onSelectSession={handleSelectSession}
+        onNewChat={handleNewChat}
+      />
     </div>
   );
 }

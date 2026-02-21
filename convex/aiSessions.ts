@@ -68,6 +68,31 @@ export const listBySite = query({
   },
 });
 
+export const listBySiteAndMode = query({
+  args: {
+    siteId: v.id("sites"),
+    mode: v.union(v.literal("builder"), v.literal("doctor")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+    const userId = identity.subject;
+
+    const sessions = await ctx.db
+      .query("aiSessions")
+      .withIndex("by_siteId_mode", (q) =>
+        q.eq("siteId", args.siteId).eq("mode", args.mode),
+      )
+      .order("desc")
+      .take(50);
+
+    // Filter to user's own non-archived sessions
+    return sessions.filter(
+      (s) => s.userId === userId && s.status !== "archived",
+    );
+  },
+});
+
 export const getById = query({
   args: {
     sessionId: v.id("aiSessions"),
