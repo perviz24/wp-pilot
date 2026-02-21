@@ -69,6 +69,21 @@ export const listDirectory = action({
       throw new Error("cPanel returned non-JSON response");
     }
 
+    // If cPanel returns a message instead of data (auth/firewall error), surface it
+    if (data?.message && !data?.data) {
+      const msg = String(data.message);
+      // Provide actionable guidance for common issues
+      if (msg.includes("Imunify360") || msg.includes("bot-protection")) {
+        throw new Error(
+          `Blocked by server firewall (Imunify360). ` +
+          `Your hosting provider's bot protection is blocking API requests. ` +
+          `Please whitelist the server IP in cPanel → Imunify360 → White List, ` +
+          `or contact your hosting provider to allow API access.`
+        );
+      }
+      throw new Error(`cPanel: ${msg.slice(0, 300)}`);
+    }
+
     if ((data?.errors as string[] | undefined)?.length) {
       throw new Error((data.errors as string[]).join(", "));
     }

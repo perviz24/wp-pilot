@@ -133,17 +133,33 @@ export function FileBrowser({ siteId }: { siteId: Id<"sites"> }) {
 
       {/* Error */}
       {error && (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>{error}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="ml-auto"
-            onClick={() => browse(currentDir)}
-          >
-            Retry
-          </Button>
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm">
+          <div className="flex items-start gap-2">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+            <div className="flex-1 space-y-2">
+              <p className="text-destructive">{error}</p>
+              {error.includes("firewall") || error.includes("Imunify360") ? (
+                <div className="rounded border bg-background/50 p-2 text-xs text-muted-foreground space-y-1">
+                  <p className="font-medium text-foreground">How to fix:</p>
+                  <ol className="list-decimal list-inside space-y-0.5">
+                    <li>Log into your cPanel dashboard directly</li>
+                    <li>Go to <strong>Imunify360 → White List</strong></li>
+                    <li>Add the IP that needs access</li>
+                    <li>Or contact your hosting provider&apos;s support</li>
+                  </ol>
+                </div>
+              ) : (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-destructive"
+                  onClick={() => browse(currentDir)}
+                >
+                  Retry
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
