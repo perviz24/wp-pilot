@@ -40,6 +40,8 @@ export function AiChat({
   const [sessionId, setSessionId] = useState<Id<"aiSessions"> | null>(
     existingSessionId,
   );
+  // Ref tracks sessionId synchronously — avoids stale closure in onFinish
+  const sessionIdRef = useRef<Id<"aiSessions"> | null>(existingSessionId);
 
   // Convex mutations for persistence
   const createSession = useMutation(api.aiSessions.create);
@@ -49,18 +51,19 @@ export function AiChat({
   // Save assistant message when streaming finishes
   const handleFinish = useCallback(
     async ({ message }: { message: UIMessage }) => {
-      if (!sessionId) return;
+      const currentSessionId = sessionIdRef.current;
+      if (!currentSessionId) return;
       const text = getMessageText(message);
       if (!text) return;
 
       await addMessage({
-        sessionId,
+        sessionId: currentSessionId,
         role: "assistant",
         content: text,
       });
-      await incrementCount({ sessionId });
+      await incrementCount({ sessionId: currentSessionId });
     },
-    [sessionId, addMessage, incrementCount],
+    [addMessage, incrementCount],
   );
 
   const { messages, sendMessage, status, stop, error } = useChat({
@@ -92,6 +95,7 @@ export function AiChat({
       const title = text.length > 50 ? text.slice(0, 50) + "..." : text;
       activeSessionId = await createSession({ siteId, mode, title });
       setSessionId(activeSessionId);
+      sessionIdRef.current = activeSessionId; // sync ref immediately for onFinish
     }
 
     // Save user message to Convex
