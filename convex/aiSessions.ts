@@ -26,6 +26,32 @@ export const create = mutation({
   },
 });
 
+export const getLatestActive = query({
+  args: {
+    siteId: v.id("sites"),
+    mode: v.union(v.literal("builder"), v.literal("doctor")),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const sessions = await ctx.db
+      .query("aiSessions")
+      .withIndex("by_siteId_mode", (q) =>
+        q.eq("siteId", args.siteId).eq("mode", args.mode),
+      )
+      .order("desc")
+      .take(10);
+
+    // Find the latest active session owned by this user
+    return (
+      sessions.find(
+        (s) => s.status === "active" && s.userId === identity.subject,
+      ) ?? null
+    );
+  },
+});
+
 export const listBySite = query({
   args: {
     siteId: v.id("sites"),

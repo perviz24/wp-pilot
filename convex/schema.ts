@@ -112,7 +112,8 @@ export default defineSchema({
   })
     .index("by_siteId", ["siteId"])
     .index("by_userId", ["userId"])
-    .index("by_siteId_updatedAt", ["siteId", "updatedAt"]),
+    .index("by_siteId_updatedAt", ["siteId", "updatedAt"])
+    .index("by_siteId_mode", ["siteId", "mode"]),
 
   // AI Brain — messages within a session
   aiMessages: defineTable({

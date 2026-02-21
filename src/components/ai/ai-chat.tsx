@@ -1,28 +1,75 @@
 "use client";
 
-import { useChat } from "@ai-sdk/react";
+import { useChat, type UIMessage } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { useMutation } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import type { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AiMessage } from "./ai-message";
 import { Send, Square, Loader2, Brain } from "lucide-react";
 
+/** Extract plain text from a UIMessage's parts array */
+function getMessageText(message: UIMessage): string {
+  return message.parts
+    .filter((p): p is { type: "text"; text: string } => p.type === "text")
+    .map((p) => p.text)
+    .join("");
+}
+
 interface AiChatProps {
   systemPrompt: string;
   mode: "builder" | "doctor";
+  siteId: Id<"sites">;
+  sessionId: Id<"aiSessions"> | null;
+  initialMessages?: UIMessage[];
 }
 
-export function AiChat({ systemPrompt, mode }: AiChatProps) {
+export function AiChat({
+  systemPrompt,
+  mode,
+  siteId,
+  sessionId: existingSessionId,
+  initialMessages,
+}: AiChatProps) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [sessionId, setSessionId] = useState<Id<"aiSessions"> | null>(
+    existingSessionId,
+  );
+
+  // Convex mutations for persistence
+  const createSession = useMutation(api.aiSessions.create);
+  const addMessage = useMutation(api.aiMessages.add);
+  const incrementCount = useMutation(api.aiSessions.incrementMessageCount);
+
+  // Save assistant message when streaming finishes
+  const handleFinish = useCallback(
+    async ({ message }: { message: UIMessage }) => {
+      if (!sessionId) return;
+      const text = getMessageText(message);
+      if (!text) return;
+
+      await addMessage({
+        sessionId,
+        role: "assistant",
+        content: text,
+      });
+      await incrementCount({ sessionId });
+    },
+    [sessionId, addMessage, incrementCount],
+  );
 
   const { messages, sendMessage, status, stop, error } = useChat({
     transport: new DefaultChatTransport({
       api: "/api/ai/chat",
       body: { system: systemPrompt },
     }),
+    messages: initialMessages,
+    onFinish: handleFinish,
   });
 
   const isLoading = status === "submitted" || status === "streaming";
@@ -34,10 +81,29 @@ export function AiChat({ systemPrompt, mode }: AiChatProps) {
     }
   }, [messages]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
-    sendMessage({ text: input });
+    const text = input.trim();
+    if (!text || isLoading) return;
+
+    // Create session on first message if none exists
+    let activeSessionId = sessionId;
+    if (!activeSessionId) {
+      const title = text.length > 50 ? text.slice(0, 50) + "..." : text;
+      activeSessionId = await createSession({ siteId, mode, title });
+      setSessionId(activeSessionId);
+    }
+
+    // Save user message to Convex
+    await addMessage({
+      sessionId: activeSessionId,
+      role: "user",
+      content: text,
+    });
+    await incrementCount({ sessionId: activeSessionId });
+
+    // Send to AI
+    sendMessage({ text });
     setInput("");
   };
 
