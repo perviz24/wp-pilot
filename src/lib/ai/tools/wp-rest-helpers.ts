@@ -7,16 +7,26 @@ import type { ToolContext } from "./types";
 import { getSiteRecord, getWpRestCredentials, buildWpAuthHeader } from "./credential-access";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
-/** Make an authenticated WP REST API call */
+/** Make an authenticated WP REST API call (default namespace: wp/v2) */
 export async function wpFetch(
   baseUrl: string,
   endpoint: string,
   authHeader: string,
   options: { method?: string; body?: unknown } = {},
 ): Promise<{ ok: boolean; status: number; data: unknown }> {
+  return wpFetchCustom(baseUrl, `/wp/v2${endpoint}`, authHeader, options);
+}
+
+/** Make an authenticated WP REST API call with a custom namespace path */
+export async function wpFetchCustom(
+  baseUrl: string,
+  namespacedEndpoint: string,
+  authHeader: string,
+  options: { method?: string; body?: unknown } = {},
+): Promise<{ ok: boolean; status: number; data: unknown }> {
   // Strip trailing slashes and /wp-json suffix if present (stored URL may include it)
   const siteRoot = baseUrl.replace(/\/+$/, "").replace(/\/wp-json\/?$/, "");
-  const url = `${siteRoot}/wp-json/wp/v2${endpoint}`;
+  const url = `${siteRoot}/wp-json${namespacedEndpoint}`;
   const headers: Record<string, string> = {
     Authorization: authHeader,
     "Content-Type": "application/json",

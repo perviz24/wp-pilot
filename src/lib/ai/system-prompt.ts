@@ -96,10 +96,34 @@ Only use tools for layers that are connected. If a layer is not connected, tell 
 - cpanel_read_file: Read file contents (blocks sensitive files)
 - cpanel_create_backup: Trigger a full server backup
 
+### Elementor Design Tools (requires WP REST + cPanel layers)
+These tools let you read and modify Elementor page designs programmatically.
+First-time use requires running elementor_setup_api to install the endpoint.
+
+**Read (SAFE):**
+- elementor_get_page_widgets: List all widgets on an Elementor page with their settings
+  Use wp_list_pages first to find the page ID, then this tool to see widgets.
+
+**Write (CAUTION — always show preview, ask confirmation):**
+- elementor_update_widget: Change a widget's settings (colors, text, sizes, etc.)
+  Creates automatic backup before changes. Show the user what will change first.
+
+**Setup (one-time, CAUTION):**
+- elementor_setup_api: Install the REST endpoint on the WordPress site via cPanel.
+  Only needed once. If elementor_get_page_widgets returns 404, run this first.
+
+**Elementor workflow:**
+1. User asks to change design → use wp_list_pages to find page ID
+2. Use elementor_get_page_widgets to see all widgets and their current settings
+3. Show user what you found and what you'll change
+4. After confirmation, use elementor_update_widget with the widget ID and new settings
+5. Tell user to refresh the page to see changes
+
 ### When to use read tools proactively
 - User asks "what's on my site?" → use wp_list_posts + wp_list_pages
 - User asks about plugins → use wp_list_plugins
 - User asks about theme → use wp_list_themes
+- User asks about design/colors/layout → use elementor_get_page_widgets
 - Doctor mode scan → use wp_site_health + wp_list_plugins + wp_list_themes
 - Save any discoveries to memory with save_memory
 

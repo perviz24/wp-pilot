@@ -8,6 +8,7 @@ import { createMemoryTools } from "./memory-tools";
 import { createWpRestReadTools } from "./wp-rest-read-tools";
 import { createWpRestWriteTools } from "./wp-rest-write-tools";
 import { createCpanelTools } from "./cpanel-tools";
+import { createElementorTools } from "./elementor-tools";
 
 /**
  * Build the complete tools object for the AI chat.
@@ -19,6 +20,7 @@ export function buildAiTools(ctx: ToolContext) {
     ...createWpRestReadTools(ctx),
     ...createWpRestWriteTools(ctx),
     ...createCpanelTools(ctx),
+    ...createElementorTools(ctx),
   };
 }
 
