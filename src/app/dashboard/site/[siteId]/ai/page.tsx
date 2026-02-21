@@ -102,9 +102,13 @@ export default function AiBrainPage() {
     setChatInstanceId((c) => c + 1);
   }, []);
 
-  // When AiChat creates a session internally, sync parent state without changing key
-  const handleSessionCreated = useCallback((sessionId: Id<"aiSessions">) => {
-    setSelectedSessionId(sessionId);
+  // When AiChat creates a session internally, do NOT update selectedSessionId.
+  // Doing so would change sessionToLoad → trigger sessionMessages query (undefined/loading)
+  // → messagesLoading=true → isLoading=true → early return with skeleton → AiChat unmounts.
+  // AiChat already tracks its own sessionId internally, so the parent doesn't need to sync.
+  const handleSessionCreated = useCallback((_sessionId: Id<"aiSessions">) => {
+    // Intentionally empty — avoids loading gate remount.
+    // Sidebar won't highlight the active session until next page load, which is acceptable.
   }, []);
 
   // Wait for all data to load before rendering chat
