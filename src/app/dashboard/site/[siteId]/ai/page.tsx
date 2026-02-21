@@ -63,16 +63,16 @@ export default function AiBrainPage() {
     mode,
   });
 
-  // Reset selection when mode changes so loading skeleton shows
+  // Auto-select latest active session on load or mode change
   useEffect(() => {
+    // Reset to loading state when mode changes (latestSession becomes undefined)
     setSelectedSessionId(undefined);
   }, [mode]);
 
-  // Auto-select latest active session once query resolves
   useEffect(() => {
     if (latestSession === undefined) return; // still loading
     setSelectedSessionId(latestSession?._id ?? null);
-  }, [latestSession?._id, mode]);
+  }, [latestSession]);
 
   // Determine which session to load
   const sessionToLoad = selectedSessionId ?? null;
