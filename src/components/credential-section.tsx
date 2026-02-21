@@ -14,6 +14,7 @@ interface CredentialField {
   placeholder: string;
   type?: string;
   half?: boolean;
+  hint?: string;
 }
 
 interface CredentialSectionProps {
@@ -100,6 +101,9 @@ export function CredentialSection({
                   value={values[field.id] ?? ""}
                   onChange={(e) => onChange(field.id, e.target.value)}
                 />
+                {field.hint && (
+                  <p className="text-xs text-muted-foreground">{field.hint}</p>
+                )}
               </div>
             ))}
           </CardContent>

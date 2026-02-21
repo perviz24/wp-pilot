@@ -26,7 +26,7 @@ const CPANEL_FIELDS = [
   { id: "cpanelHost", label: "Host", placeholder: "server.example.com", half: true },
   { id: "cpanelPort", label: "Port", placeholder: "2083", type: "number", half: true },
   { id: "cpanelUsername", label: "Username", placeholder: "cpanel_user" },
-  { id: "cpanelToken", label: "API Token", placeholder: "cPanel API token", type: "password" },
+  { id: "cpanelToken", label: "API Token", placeholder: "YPXAZ02XDFKNG741D8X6SBJEZQF5UHZ3", type: "password", hint: "Paste the long token VALUE shown when creating a token — not the token name" },
 ];
 
 const WP_REST_FIELDS = [
