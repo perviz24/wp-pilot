@@ -58,8 +58,19 @@ export default function AiBrainPage() {
       : "skip",
   );
 
-  // Loading
-  if (site === undefined || memories === undefined) {
+  // Wait for all data to load before rendering chat
+  // activeSession can be: undefined (loading), null (none found), or object (found)
+  // sessionMessages can be: undefined (loading/skipped), or array
+  const sessionLoading = activeSession === undefined;
+  const messagesLoading =
+    activeSession?._id && sessionMessages === undefined;
+  const isLoading =
+    site === undefined ||
+    memories === undefined ||
+    sessionLoading ||
+    messagesLoading;
+
+  if (isLoading) {
     return (
       <div className="flex h-[calc(100vh-4rem)] flex-col">
         <div className="flex items-center gap-3 border-b px-4 py-3">
@@ -137,10 +148,10 @@ export default function AiBrainPage() {
         </Tabs>
       </div>
 
-      {/* Chat area — key={mode} forces remount to load correct session */}
+      {/* Chat area — key forces remount when mode or session changes */}
       <div className="flex-1 overflow-hidden">
         <AiChat
-          key={mode}
+          key={`${mode}-${activeSession?._id ?? "new"}`}
           systemPrompt={systemPrompt}
           mode={mode}
           siteId={siteId as Id<"sites">}
