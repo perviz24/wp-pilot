@@ -43,10 +43,16 @@ export function AiChat({
   // Ref tracks sessionId synchronously — avoids stale closure in onFinish
   const sessionIdRef = useRef<Id<"aiSessions"> | null>(existingSessionId);
 
+  // Track whether we've already generated an AI title for this session
+  const titleGeneratedRef = useRef(!!existingSessionId);
+  // Store the first user message for title generation
+  const firstUserMessageRef = useRef<string>("");
+
   // Convex mutations for persistence
   const createSession = useMutation(api.aiSessions.create);
   const addMessage = useMutation(api.aiMessages.add);
   const incrementCount = useMutation(api.aiSessions.incrementMessageCount);
+  const updateTitle = useMutation(api.aiSessions.updateTitle);
 
   // Save assistant message when streaming finishes
   const handleFinish = useCallback(
@@ -62,8 +68,31 @@ export function AiChat({
         content: text,
       });
       await incrementCount({ sessionId: currentSessionId });
+
+      // Auto-generate a smart title after the first assistant response
+      if (!titleGeneratedRef.current && firstUserMessageRef.current) {
+        titleGeneratedRef.current = true;
+        // Fire-and-forget — don't block the UI
+        fetch("/api/ai/title", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userMessage: firstUserMessageRef.current,
+            assistantMessage: text.slice(0, 300),
+          }),
+        })
+          .then((res) => res.json())
+          .then((data: { title?: string }) => {
+            if (data?.title) {
+              updateTitle({ sessionId: currentSessionId, title: data.title });
+            }
+          })
+          .catch(() => {
+            // Silent fail — title stays as truncated user message
+          });
+      }
     },
-    [addMessage, incrementCount],
+    [addMessage, incrementCount, updateTitle],
   );
 
   const { messages, sendMessage, status, stop, error } = useChat({
@@ -92,10 +121,12 @@ export function AiChat({
     // Create session on first message if none exists
     let activeSessionId = sessionId;
     if (!activeSessionId) {
-      const title = text.length > 50 ? text.slice(0, 50) + "..." : text;
-      activeSessionId = await createSession({ siteId, mode, title });
+      // Temporary title — will be replaced by AI-generated title after first response
+      const tempTitle = text.length > 50 ? text.slice(0, 50) + "..." : text;
+      activeSessionId = await createSession({ siteId, mode, title: tempTitle });
       setSessionId(activeSessionId);
       sessionIdRef.current = activeSessionId; // sync ref immediately for onFinish
+      firstUserMessageRef.current = text; // store for title generation
     }
 
     // Save user message to Convex
