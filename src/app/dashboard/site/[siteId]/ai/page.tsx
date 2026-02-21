@@ -91,6 +91,22 @@ export default function AiBrainPage() {
     sessionToLoad ? { sessionId: sessionToLoad } : "skip",
   );
 
+  // Hooks must be called unconditionally (before early returns)
+  const handleNewChat = useCallback(() => {
+    setSelectedSessionId(null);
+    setChatInstanceId((c) => c + 1);
+  }, []);
+
+  const handleSelectSession = useCallback((sessionId: Id<"aiSessions">) => {
+    setSelectedSessionId(sessionId);
+    setChatInstanceId((c) => c + 1);
+  }, []);
+
+  // When AiChat creates a session internally, sync parent state without changing key
+  const handleSessionCreated = useCallback((sessionId: Id<"aiSessions">) => {
+    setSelectedSessionId(sessionId);
+  }, []);
+
   // Wait for all data to load before rendering chat
   const sessionLoading = selectedSessionId === undefined;
   const messagesLoading = sessionToLoad && sessionMessages === undefined;
@@ -144,21 +160,6 @@ export default function AiBrainPage() {
     sessionMessages && sessionMessages.length > 0
       ? convertToUIMessages(sessionMessages)
       : undefined;
-
-  const handleNewChat = useCallback(() => {
-    setSelectedSessionId(null);
-    setChatInstanceId((c) => c + 1);
-  }, []);
-
-  const handleSelectSession = useCallback((sessionId: Id<"aiSessions">) => {
-    setSelectedSessionId(sessionId);
-    setChatInstanceId((c) => c + 1);
-  }, []);
-
-  // When AiChat creates a session internally, sync parent state without changing key
-  const handleSessionCreated = useCallback((sessionId: Id<"aiSessions">) => {
-    setSelectedSessionId(sessionId);
-  }, []);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
