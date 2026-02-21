@@ -134,7 +134,82 @@ export default defineSchema({
     .index("by_sessionId", ["sessionId"])
     .index("by_sessionId_timestamp", ["sessionId", "timestamp"]),
 
-  // AI Brain — persistent per-site memory
+  // AI Knowledge Layer 1 — Global knowledge (applies to ALL sites)
+  aiGlobalKnowledge: defineTable({
+    category: v.union(
+      v.literal("security"),         // safety rules, risk classification
+      v.literal("seo"),              // search engine best practices
+      v.literal("speed"),            // performance optimization
+      v.literal("design"),           // design patterns
+      v.literal("conversion"),       // conversion optimization
+      v.literal("accessibility"),    // a11y rules
+      v.literal("woocommerce"),      // WooCommerce-specific knowledge
+      v.literal("learndash"),        // LearnDash-specific knowledge
+      v.literal("elementor"),        // Elementor-specific knowledge
+      v.literal("wordpress-core"),   // core WP best practices
+      v.literal("hosting"),          // hosting provider knowledge
+      v.literal("content"),          // content management rules
+    ),
+    key: v.string(),                 // unique identifier within category
+    content: v.string(),             // the knowledge itself
+    source: v.union(
+      v.literal("best-practice"),    // known universal truth
+      v.literal("documentation"),    // from official docs
+      v.literal("learned"),          // promoted from pattern library
+    ),
+    confidence: v.number(),          // 0-1
+    appliesWhen: v.optional(v.string()), // conditional tag, e.g. "plugin:woocommerce"
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_category", ["category"])
+    .index("by_key", ["key"]),
+
+  // AI Knowledge Layer 2 — Pattern library (cross-site learned patterns)
+  aiPatternLibrary: defineTable({
+    category: v.union(
+      v.literal("security"),
+      v.literal("seo"),
+      v.literal("speed"),
+      v.literal("design"),
+      v.literal("conversion"),
+      v.literal("accessibility"),
+      v.literal("woocommerce"),
+      v.literal("learndash"),
+      v.literal("elementor"),
+      v.literal("wordpress-core"),
+      v.literal("hosting"),
+      v.literal("content"),
+    ),
+    key: v.string(),                 // unique pattern identifier
+    problem: v.string(),             // what problem this solves
+    solution: v.string(),            // how to solve it
+    testedOn: v.array(v.object({     // which sites this was tested on
+      siteId: v.string(),            // stored as string for flexibility
+      siteName: v.string(),
+      date: v.number(),
+      success: v.boolean(),
+      notes: v.optional(v.string()),
+    })),
+    successRate: v.number(),         // computed: successes / total tests
+    confidence: v.number(),          // successRate + site bonus (capped)
+    appliesWhen: v.optional(v.array(v.string())), // tags: ["woocommerce", "elementor"]
+    promotedToGlobal: v.boolean(),   // true if promoted to global knowledge
+    source: v.union(
+      v.literal("ai-discovery"),     // AI discovered during conversation
+      v.literal("user-feedback"),    // user confirmed this works
+      v.literal("audit-finding"),    // found during site audit
+      v.literal("documentation"),    // from official docs (auto-promotes)
+    ),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_category", ["category"])
+    .index("by_key", ["key"])
+    .index("by_confidence", ["confidence"])
+    .index("by_promotedToGlobal", ["promotedToGlobal"]),
+
+  // AI Knowledge Layer 3 — Per-site memory (existing, unchanged)
   aiSiteMemory: defineTable({
     siteId: v.id("sites"),
     category: v.union(

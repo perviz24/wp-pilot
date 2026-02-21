@@ -1,6 +1,6 @@
 /**
  * Builds the dynamic system prompt for the AI Brain.
- * Injects site context, connection layers, and persistent memories.
+ * Injects 3-layer knowledge: global → patterns → site memory.
  */
 
 interface SiteContext {
@@ -19,14 +19,34 @@ interface SiteMemory {
   confidence: number;
 }
 
+interface GlobalKnowledge {
+  category: string;
+  key: string;
+  content: string;
+  confidence: number;
+  appliesWhen?: string;
+}
+
+interface Pattern {
+  category: string;
+  key: string;
+  problem: string;
+  solution: string;
+  confidence: number;
+  successRate: number;
+  testedOn: { siteName: string; success: boolean }[];
+}
+
 interface PromptConfig {
   mode: "builder" | "doctor";
   site: SiteContext;
   memories: SiteMemory[];
+  globalKnowledge?: GlobalKnowledge[];
+  patterns?: Pattern[];
 }
 
 export function buildSystemPrompt(config: PromptConfig): string {
-  const { mode, site, memories } = config;
+  const { mode, site, memories, globalKnowledge = [], patterns = [] } = config;
 
   const layers = [
     site.cpanelConnected ? "cPanel API (file management, backups, DNS)" : null,
@@ -38,7 +58,7 @@ export function buildSystemPrompt(config: PromptConfig): string {
     ? site.discoveredApis.map((a) => `${a.label} (${a.namespace})`).join(", ")
     : "None discovered yet";
 
-  // Group memories by category
+  // Group site memories by category
   const siteDna = memories.filter((m) => m.category === "site_dna");
   const warnings = memories.filter((m) => m.category === "warning");
   const prefs = memories.filter((m) => m.category === "user_preference");
@@ -53,6 +73,8 @@ Always explain what you're about to do before taking action.`
 Start by scanning for common problems, then suggest fixes with clear explanations.
 Prioritize non-destructive diagnostic tools first.`;
 
+  const globalSection = buildGlobalSection(globalKnowledge);
+  const patternSection = buildPatternSection(patterns);
   const memorySection = buildMemorySection(siteDna, warnings, prefs, history);
 
   return `You are WP Pilot AI — an expert WordPress site manager.
@@ -123,25 +145,42 @@ First-time use requires running elementor_setup_api to install the endpoint.
 4. After confirmation, use elementor_update_widget with the widget ID and new settings
 5. Tell user to refresh the page to see changes
 
+### Knowledge System Tools
+You have a 3-layer knowledge system that grows smarter with every site managed:
+
+**save_memory** — Save site-specific facts (this site only)
+- Site facts: theme, plugins, PHP version → category "site_dna"
+- What worked or failed → category "action_result"
+- User preferences → category "user_preference"
+- Warnings → category "warning"
+
+**save_global_knowledge** — Save universal WordPress knowledge (all sites)
+- Best practices from docs or experience that apply everywhere
+- Use sparingly — only for truly universal truths
+
+**save_pattern** — Save a cross-site pattern (problem + solution)
+- When you discover a workaround or technique that might help other sites
+- Tracks which sites it was tested on and success rate
+- Auto-promotes to global knowledge when proven on 3+ sites
+
+**read_knowledge** — Search all 3 layers at once
+- Use this BEFORE taking unfamiliar actions to check for known patterns
+- Returns global rules, cross-site patterns, and site-specific memories
+
 ### When to use read tools proactively
 - User asks "what's on my site?" → use wp_list_posts + wp_list_pages
 - User asks about plugins → use wp_list_plugins
 - User asks about theme → use wp_list_themes
 - User asks about design/colors/layout → use elementor_get_page_widgets
 - Doctor mode scan → use wp_site_health + wp_list_plugins + wp_list_themes
+- Before ANY write operation → use read_knowledge to check for relevant patterns/warnings
 - Save any discoveries to memory with save_memory
-
-## Memory System
-You have a save_memory tool to remember important facts across sessions.
-USE IT proactively when you learn something worth remembering:
-- Site facts: theme name, active plugins, PHP version, hosting provider → category "site_dna"
-- What worked or failed: successful/failed operations → category "action_result"
-- User preferences: design style, plugin choices, workflow habits → category "user_preference"
-- Warnings: things that broke, incompatible plugins, risky configs → category "warning"
 
 Save memories naturally during conversation — don't announce every save.
 Use high confidence (0.9+) for verified facts, lower (0.5-0.8) for observations.
 
+${globalSection}
+${patternSection}
 ${memorySection}
 
 ## Communication Style
@@ -150,6 +189,50 @@ ${memorySection}
 - When explaining technical concepts, use analogies.
 - Always tell the user what you're about to do and what to expect.
 - After taking action, confirm what happened with specific details.`;
+}
+
+function buildGlobalSection(entries: GlobalKnowledge[]): string {
+  if (entries.length === 0) return "";
+
+  // Group by category, take top entries per category
+  const grouped = new Map<string, GlobalKnowledge[]>();
+  for (const entry of entries) {
+    const existing = grouped.get(entry.category) ?? [];
+    existing.push(entry);
+    grouped.set(entry.category, existing);
+  }
+
+  const lines: string[] = [];
+  for (const [category, items] of grouped) {
+    // Cap at 5 per category to manage token budget
+    const top = items.sort((a, b) => b.confidence - a.confidence).slice(0, 5);
+    lines.push(`**${category}:**`);
+    for (const item of top) {
+      lines.push(`- ${item.key}: ${item.content}`);
+    }
+  }
+
+  return `## WordPress Knowledge Base (applies to all sites)\n${lines.join("\n")}`;
+}
+
+function buildPatternSection(patterns: Pattern[]): string {
+  if (patterns.length === 0) return "";
+
+  // Only show patterns with confidence > 0.5
+  const relevant = patterns
+    .filter((p) => p.confidence > 0.5)
+    .sort((a, b) => b.confidence - a.confidence)
+    .slice(0, 15); // Cap at 15 patterns
+
+  if (relevant.length === 0) return "";
+
+  const lines = relevant.map((p) => {
+    const sites = p.testedOn.length;
+    const rate = Math.round(p.successRate * 100);
+    return `- **${p.key}** (${rate}% success on ${sites} site${sites !== 1 ? "s" : ""}): ${p.problem} → ${p.solution}`;
+  });
+
+  return `## Cross-Site Patterns (learned from other sites)\n${lines.join("\n")}`;
 }
 
 function buildMemorySection(

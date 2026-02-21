@@ -61,6 +61,18 @@ export default function AiBrainPage() {
     siteId: siteId as Id<"sites">,
   });
 
+  // Layer 1: Global knowledge — filtered by site's detected plugins
+  const detectedPlugins = site?.discoveredApis?.map((a) => a.namespace) ?? [];
+  const globalKnowledge = useQuery(api.aiGlobalKnowledge.listApplicable, {
+    detectedPlugins: detectedPlugins.length > 0 ? detectedPlugins : undefined,
+  });
+
+  // Layer 2: Cross-site patterns — filtered by detected plugins + min confidence
+  const patterns = useQuery(api.aiPatternLibrary.listApplicable, {
+    detectedPlugins: detectedPlugins.length > 0 ? detectedPlugins : undefined,
+    minConfidence: 0.5,
+  });
+
   // Get latest active session to auto-select on first load
   const latestSession = useQuery(api.aiSessions.getLatestActive, {
     siteId: siteId as Id<"sites">,
@@ -117,6 +129,8 @@ export default function AiBrainPage() {
   const isLoading =
     site === undefined ||
     memories === undefined ||
+    globalKnowledge === undefined ||
+    patterns === undefined ||
     sessionLoading ||
     messagesLoading;
 
@@ -156,6 +170,25 @@ export default function AiBrainPage() {
       key: m.key,
       content: m.content,
       confidence: m.confidence,
+    })),
+    globalKnowledge: (globalKnowledge ?? []).map((g) => ({
+      category: g.category,
+      key: g.key,
+      content: g.content,
+      confidence: g.confidence,
+      appliesWhen: g.appliesWhen,
+    })),
+    patterns: (patterns ?? []).map((p) => ({
+      category: p.category,
+      key: p.key,
+      problem: p.problem,
+      solution: p.solution,
+      confidence: p.confidence,
+      successRate: p.successRate,
+      testedOn: p.testedOn.map((t) => ({
+        siteName: t.siteName,
+        success: t.success,
+      })),
     })),
   });
 

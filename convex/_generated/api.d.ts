@@ -8,7 +8,9 @@
  * @module
  */
 
+import type * as aiGlobalKnowledge from "../aiGlobalKnowledge.js";
 import type * as aiMessages from "../aiMessages.js";
+import type * as aiPatternLibrary from "../aiPatternLibrary.js";
 import type * as aiSessions from "../aiSessions.js";
 import type * as aiSiteMemory from "../aiSiteMemory.js";
 import type * as auditLogs from "../auditLogs.js";
@@ -24,7 +26,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  aiGlobalKnowledge: typeof aiGlobalKnowledge;
   aiMessages: typeof aiMessages;
+  aiPatternLibrary: typeof aiPatternLibrary;
   aiSessions: typeof aiSessions;
   aiSiteMemory: typeof aiSiteMemory;
   auditLogs: typeof auditLogs;
