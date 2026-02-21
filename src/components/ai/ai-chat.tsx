@@ -26,6 +26,7 @@ interface AiChatProps {
   siteId: Id<"sites">;
   sessionId: Id<"aiSessions"> | null;
   initialMessages?: UIMessage[];
+  onSessionCreated?: (sessionId: Id<"aiSessions">) => void;
 }
 
 export function AiChat({
@@ -34,6 +35,7 @@ export function AiChat({
   siteId,
   sessionId: existingSessionId,
   initialMessages,
+  onSessionCreated,
 }: AiChatProps) {
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -127,6 +129,7 @@ export function AiChat({
       setSessionId(activeSessionId);
       sessionIdRef.current = activeSessionId; // sync ref immediately for onFinish
       firstUserMessageRef.current = text; // store for title generation
+      onSessionCreated?.(activeSessionId); // notify parent to sync session ID
     }
 
     // Save user message to Convex

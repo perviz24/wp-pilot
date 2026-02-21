@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ArrowLeft, Hammer, Stethoscope, History } from "lucide-react";
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { AiChat } from "@/components/ai/ai-chat";
 import { SessionSidebar } from "@/components/ai/session-sidebar";
 import { buildSystemPrompt } from "@/lib/ai/system-prompt";
@@ -49,6 +49,10 @@ export default function AiBrainPage() {
     Id<"aiSessions"> | null | undefined
   >(undefined);
 
+  // Stable counter — only increments on EXPLICIT user actions (new chat, select session, mode change).
+  // Used as React key so AiChat never remounts due to reactive query updates.
+  const [chatInstanceId, setChatInstanceId] = useState(0);
+
   const site = useQuery(api.sites.getById, {
     siteId: siteId as Id<"sites">,
   });
@@ -63,16 +67,20 @@ export default function AiBrainPage() {
     mode,
   });
 
-  // Auto-select latest active session on load or mode change
+  // Reset to loading state when mode changes
   useEffect(() => {
-    // Reset to loading state when mode changes (latestSession becomes undefined)
     setSelectedSessionId(undefined);
+    setChatInstanceId((c) => c + 1);
   }, [mode]);
 
+  // Auto-select latest session on INITIAL load only (when selectedSessionId is undefined).
+  // Once user has selected/created a session, skip — prevents reactive query from
+  // changing the key and remounting AiChat mid-conversation.
   useEffect(() => {
     if (latestSession === undefined) return; // still loading
+    if (selectedSessionId !== undefined) return; // already selected, skip
     setSelectedSessionId(latestSession?._id ?? null);
-  }, [latestSession]);
+  }, [latestSession, selectedSessionId]);
 
   // Determine which session to load
   const sessionToLoad = selectedSessionId ?? null;
@@ -137,13 +145,20 @@ export default function AiBrainPage() {
       ? convertToUIMessages(sessionMessages)
       : undefined;
 
-  const handleNewChat = () => {
+  const handleNewChat = useCallback(() => {
     setSelectedSessionId(null);
-  };
+    setChatInstanceId((c) => c + 1);
+  }, []);
 
-  const handleSelectSession = (sessionId: Id<"aiSessions">) => {
+  const handleSelectSession = useCallback((sessionId: Id<"aiSessions">) => {
     setSelectedSessionId(sessionId);
-  };
+    setChatInstanceId((c) => c + 1);
+  }, []);
+
+  // When AiChat creates a session internally, sync parent state without changing key
+  const handleSessionCreated = useCallback((sessionId: Id<"aiSessions">) => {
+    setSelectedSessionId(sessionId);
+  }, []);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col">
@@ -192,15 +207,16 @@ export default function AiBrainPage() {
         </Tabs>
       </div>
 
-      {/* Chat area — key forces remount when mode or session changes */}
+      {/* Chat area — key uses stable counter, only changes on explicit user actions */}
       <div className="flex-1 overflow-hidden">
         <AiChat
-          key={`${mode}-${sessionToLoad ?? "new"}`}
+          key={`${mode}-${chatInstanceId}`}
           systemPrompt={systemPrompt}
           mode={mode}
           siteId={siteId as Id<"sites">}
           sessionId={sessionToLoad}
           initialMessages={initialMessages}
+          onSessionCreated={handleSessionCreated}
         />
       </div>
 
