@@ -137,7 +137,9 @@ SAFE read-only operation.`,
         const wp = await getWpContext(ctx);
         if ("error" in wp) return wp.error;
 
-        const url = `${wp.creds.url.replace(/\/+$/, "")}/wp-json/`;
+        // Strip /wp-json suffix if present, then add it back cleanly
+        const siteRoot = wp.creds.url.replace(/\/+$/, "").replace(/\/wp-json\/?$/, "");
+        const url = `${siteRoot}/wp-json/`;
         const response = await fetch(url, {
           headers: { Authorization: wp.authHeader },
         });

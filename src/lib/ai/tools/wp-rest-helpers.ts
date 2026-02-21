@@ -14,7 +14,9 @@ export async function wpFetch(
   authHeader: string,
   options: { method?: string; body?: unknown } = {},
 ): Promise<{ ok: boolean; status: number; data: unknown }> {
-  const url = `${baseUrl.replace(/\/+$/, "")}/wp-json/wp/v2${endpoint}`;
+  // Strip trailing slashes and /wp-json suffix if present (stored URL may include it)
+  const siteRoot = baseUrl.replace(/\/+$/, "").replace(/\/wp-json\/?$/, "");
+  const url = `${siteRoot}/wp-json/wp/v2${endpoint}`;
   const headers: Record<string, string> = {
     Authorization: authHeader,
     "Content-Type": "application/json",
