@@ -11,16 +11,18 @@ export interface CpanelFile {
   humansize: string;
 }
 
+// Return type — errors are returned as data (Convex actions sanitize thrown errors)
+export type ListDirectoryResult =
+  | { ok: true; files: CpanelFile[]; currentDir: string }
+  | { ok: false; error: string; errorType: "auth" | "firewall" | "connection" | "api" };
+
 // List directory contents via cPanel UAPI Fileman::list_files
 export const listDirectory = action({
   args: {
     siteId: v.id("sites"),
     dir: v.string(),
   },
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{ files: CpanelFile[]; currentDir: string }> => {
+  handler: async (ctx, args): Promise<ListDirectoryResult> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Not authenticated");
 
@@ -29,7 +31,11 @@ export const listDirectory = action({
     });
 
     if (!site || !site.cpanelHost || !site.cpanelToken || !site.cpanelUsername) {
-      throw new Error("Missing cPanel credentials");
+      return {
+        ok: false,
+        error: "Missing cPanel credentials. Go to Settings to add them.",
+        errorType: "auth",
+      };
     }
 
     const port = site.cpanelPort ?? 2083;
@@ -52,40 +58,56 @@ export const listDirectory = action({
       });
     } catch (fetchError) {
       const msg = fetchError instanceof Error ? fetchError.message : String(fetchError);
-      throw new Error(`cPanel connection failed: ${msg}`);
+      return {
+        ok: false,
+        error: `cPanel connection failed: ${msg}`,
+        errorType: "connection",
+      };
     }
 
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      throw new Error(
-        `cPanel API returned ${response.status}: ${body.slice(0, 200)}`
-      );
+      return {
+        ok: false,
+        error: `cPanel API returned ${response.status}: ${body.slice(0, 200)}`,
+        errorType: "api",
+      };
     }
 
     let data: Record<string, unknown>;
     try {
       data = await response.json();
     } catch {
-      throw new Error("cPanel returned non-JSON response");
+      return {
+        ok: false,
+        error: "cPanel returned non-JSON response",
+        errorType: "api",
+      };
     }
 
     // If cPanel returns a message instead of data (auth/firewall error), surface it
     if (data?.message && !data?.data) {
       const msg = String(data.message);
-      // Provide actionable guidance for common issues
       if (msg.includes("Imunify360") || msg.includes("bot-protection")) {
-        throw new Error(
-          `Blocked by server firewall (Imunify360). ` +
-          `Your hosting provider's bot protection is blocking API requests. ` +
-          `Please whitelist the server IP in cPanel → Imunify360 → White List, ` +
-          `or contact your hosting provider to allow API access.`
-        );
+        return {
+          ok: false,
+          error:
+            "Blocked by server firewall (Imunify360). " +
+            "Your hosting provider's bot protection is blocking API requests. " +
+            "Please whitelist the server IP in cPanel → Imunify360 → White List, " +
+            "or contact your hosting provider to allow API access.",
+          errorType: "firewall",
+        };
       }
-      throw new Error(`cPanel: ${msg.slice(0, 300)}`);
+      return { ok: false, error: `cPanel: ${msg.slice(0, 300)}`, errorType: "api" };
     }
 
     if ((data?.errors as string[] | undefined)?.length) {
-      throw new Error((data.errors as string[]).join(", "));
+      return {
+        ok: false,
+        error: (data.errors as string[]).join(", "),
+        errorType: "api",
+      };
     }
 
     const rawFiles = Array.isArray(data?.data) ? (data.data as Record<string, unknown>[]) : [];
@@ -116,7 +138,7 @@ export const listDirectory = action({
       success: true,
     });
 
-    return { files, currentDir: args.dir };
+    return { ok: true, files, currentDir: args.dir };
   },
 });
 

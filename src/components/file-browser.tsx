@@ -3,7 +3,7 @@
 import { useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
-import type { CpanelFile } from "../../convex/files";
+import type { CpanelFile, ListDirectoryResult } from "../../convex/files";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -55,18 +55,26 @@ export function FileBrowser({ siteId }: { siteId: Id<"sites"> }) {
   const [currentDir, setCurrentDir] = useState("public_html");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorType, setErrorType] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   const browse = async (dir: string) => {
     setLoading(true);
     setError(null);
+    setErrorType(null);
     try {
-      const result = await listDir({ siteId, dir });
+      const result: ListDirectoryResult = await listDir({ siteId, dir });
+      if (!result.ok) {
+        setError(result.error);
+        setErrorType(result.errorType);
+        return;
+      }
       setFiles(result.files);
       setCurrentDir(result.currentDir);
       setLoaded(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to list files");
+      setErrorType("connection");
     } finally {
       setLoading(false);
     }
@@ -138,7 +146,7 @@ export function FileBrowser({ siteId }: { siteId: Id<"sites"> }) {
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
             <div className="flex-1 space-y-2">
               <p className="text-destructive">{error}</p>
-              {error.includes("firewall") || error.includes("Imunify360") ? (
+              {errorType === "firewall" ? (
                 <div className="rounded border bg-background/50 p-2 text-xs text-muted-foreground space-y-1">
                   <p className="font-medium text-foreground">How to fix:</p>
                   <ol className="list-decimal list-inside space-y-0.5">
