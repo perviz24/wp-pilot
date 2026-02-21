@@ -217,18 +217,40 @@ CAUTION: Creates a file on the server. Explain to the user what this does before
 
         const authHeader = buildCpanelAuthHeader(creds);
         const phpContent = getMuPluginContent();
+        const cpanelBase = `https://${creds.host}:${creds.port}`;
 
         // First ensure mu-plugins directory exists
-        const mkdirUrl = `https://${creds.host}:${creds.port}/execute/Fileman/mkdir?dir=public_html/wp-content&name=mu-plugins`;
-        await fetch(mkdirUrl, {
-          headers: { Authorization: authHeader },
+        const mkdirBody = new URLSearchParams({
+          dir: "public_html/wp-content",
+          name: "mu-plugins",
+        });
+        await fetch(`${cpanelBase}/execute/Fileman/mkdir`, {
+          method: "POST",
+          headers: {
+            Authorization: authHeader,
+            "Content-Type": "application/x-www-form-urlencoded",
+          },
+          body: mkdirBody.toString(),
         }).catch(() => null); // Ignore if already exists
 
-        // Write the mu-plugin file
-        const writeUrl = `https://${creds.host}:${creds.port}/execute/Fileman/save_file_content?dir=public_html/wp-content/mu-plugins&file=wp-pilot-elementor-api.php&content=${encodeURIComponent(phpContent)}`;
-        const response = await fetch(writeUrl, {
-          headers: { Authorization: authHeader },
+        // Write the mu-plugin file (POST with form body — required by cPanel UAPI)
+        const writeBody = new URLSearchParams({
+          dir: "public_html/wp-content/mu-plugins",
+          file: "wp-pilot-elementor-api.php",
+          content: phpContent,
+          charset: "utf-8",
         });
+        const response = await fetch(
+          `${cpanelBase}/execute/Fileman/save_file_content`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: authHeader,
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: writeBody.toString(),
+          },
+        );
 
         if (!response.ok) {
           return `cPanel error ${response.status}: Could not write mu-plugin file.`;
