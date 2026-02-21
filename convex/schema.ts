@@ -94,4 +94,63 @@ export default defineSchema({
   })
     .index("by_siteId", ["siteId"])
     .index("by_siteId_startedAt", ["siteId", "startedAt"]),
+
+  // AI Brain — chat sessions per site
+  aiSessions: defineTable({
+    siteId: v.id("sites"),
+    userId: v.string(),
+    mode: v.union(v.literal("builder"), v.literal("doctor")),
+    title: v.string(),
+    status: v.union(
+      v.literal("active"),
+      v.literal("completed"),
+      v.literal("archived"),
+    ),
+    messageCount: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_siteId", ["siteId"])
+    .index("by_userId", ["userId"])
+    .index("by_siteId_updatedAt", ["siteId", "updatedAt"]),
+
+  // AI Brain — messages within a session
+  aiMessages: defineTable({
+    sessionId: v.id("aiSessions"),
+    role: v.union(
+      v.literal("user"),
+      v.literal("assistant"),
+      v.literal("system"),
+      v.literal("tool"),
+    ),
+    content: v.string(),
+    // Tool call data (stored as JSON string for flexibility)
+    toolCalls: v.optional(v.string()),
+    // Tool result data
+    toolResults: v.optional(v.string()),
+    timestamp: v.number(),
+  })
+    .index("by_sessionId", ["sessionId"])
+    .index("by_sessionId_timestamp", ["sessionId", "timestamp"]),
+
+  // AI Brain — persistent per-site memory
+  aiSiteMemory: defineTable({
+    siteId: v.id("sites"),
+    category: v.union(
+      v.literal("site_dna"),        // theme, plugins, structure
+      v.literal("action_result"),    // what worked / what failed
+      v.literal("user_preference"),  // user's style, recurring requests
+      v.literal("warning"),          // things to avoid on this site
+    ),
+    key: v.string(),                 // e.g. "active_theme", "plugin:woocommerce"
+    content: v.string(),             // the actual memory content
+    confidence: v.number(),          // 0-1, higher = more reliable
+    source: v.string(),              // "scan", "user_feedback", "action_outcome"
+    lastVerifiedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_siteId", ["siteId"])
+    .index("by_siteId_category", ["siteId", "category"])
+    .index("by_siteId_key", ["siteId", "key"]),
 });
