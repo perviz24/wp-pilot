@@ -119,8 +119,62 @@ async function attemptCpanelFetch(
   return { ok: true, data };
 }
 
-// List directory contents via cPanel UAPI Fileman::list_files
-// Tries multiple connection methods if Imunify360 blocks the primary one
+/** PHP filesystem bridge: calls the WP REST endpoint that reads files via PHP scandir.
+ *  This runs ON the WordPress server itself — no Imunify360 IP blocking.
+ *  Returns null on any failure (caller falls back to cPanel). */
+async function attemptWpBridge(
+  wpRestUrl: string,
+  username: string,
+  appPassword: string,
+  dir: string,
+): Promise<CpanelFile[] | null> {
+  // Normalise the WP REST base URL: strip trailing /wp-json or /wp-json/ if present
+  const base = wpRestUrl.replace(/\/wp-json\/?$/, "").replace(/\/$/, "");
+  const url = `${base}/wp-json/wp-pilot/v1/files?path=${encodeURIComponent(dir)}`;
+
+  // Basic auth using btoa (Web Standard API available in Convex runtime)
+  const credentials = btoa(`${username}:${appPassword}`);
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: "GET",
+      headers: {
+        Authorization: `Basic ${credentials}`,
+        Accept: "application/json",
+      },
+    });
+  } catch {
+    return null; // Network error — fall through to cPanel
+  }
+
+  if (!response.ok) return null; // Auth failure or endpoint not installed — fall through
+
+  let data: { path?: string; files?: unknown[] };
+  try {
+    data = await response.json();
+  } catch {
+    return null;
+  }
+
+  if (!Array.isArray(data?.files)) return null;
+
+  // Map PHP bridge response to CpanelFile shape
+  const files: CpanelFile[] = (data.files as Record<string, unknown>[]).map((f) => ({
+    name: String(f.name ?? ""),
+    fullpath: String(f.fullpath ?? ""),
+    type: f.type === "dir" ? "dir" : f.type === "link" ? "link" : "file",
+    size: Number(f.size ?? 0),
+    mtime: Number(f.mtime ?? 0),
+    humansize: String(f.humansize ?? ""),
+  }));
+
+  return files;
+}
+
+// List directory contents.
+// Priority: 1) PHP filesystem bridge (via WP REST, no IP blocks)
+//            2) cPanel UAPI direct (falls back if bridge unavailable/fails)
 export const listDirectory = action({
   args: {
     siteId: v.id("sites"),
@@ -131,11 +185,40 @@ export const listDirectory = action({
     if (!identity) throw new Error("Not authenticated");
 
     const site = await ctx.runQuery(api.sites.getById, { siteId: args.siteId });
+    if (!site) {
+      return { ok: false, error: "Site not found.", errorType: "auth" };
+    }
 
-    if (!site || !site.cpanelHost || !site.cpanelToken || !site.cpanelUsername) {
+    // ── Priority 1: PHP filesystem bridge via WP REST API ──────────────────
+    // Runs on the same server as cPanel — bypasses Imunify360 IP blocking.
+    if (site.wpRestUrl && site.wpUsername && site.wpAppPassword) {
+      const bridgeFiles = await attemptWpBridge(
+        site.wpRestUrl,
+        site.wpUsername,
+        site.wpAppPassword,
+        args.dir,
+      );
+
+      if (bridgeFiles !== null) {
+        await ctx.runMutation(api.backups.logAudit, {
+          siteId: args.siteId,
+          action: `Browse files: ${args.dir} (via WP bridge)`,
+          layer: "cpanel",
+          riskLevel: "safe",
+          success: true,
+        });
+        return { ok: true, files: bridgeFiles, currentDir: args.dir };
+      }
+      // Bridge failed (endpoint not yet installed, or WP offline) — fall through to cPanel
+    }
+
+    // ── Priority 2: cPanel UAPI direct ─────────────────────────────────────
+    if (!site.cpanelHost || !site.cpanelToken || !site.cpanelUsername) {
       return {
         ok: false,
-        error: "Missing cPanel credentials. Go to Settings to add them.",
+        error:
+          "No file access method available. " +
+          "Add WordPress credentials to use the PHP bridge, or add cPanel credentials.",
         errorType: "auth",
       };
     }

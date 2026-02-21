@@ -16,6 +16,7 @@
  *   POST /wp-json/wp-pilot/v1/elementor/{post_id}/widget/{widget_id} — update widget
  *   GET  /wp-json/wp-pilot/v1/page-structure/{post_id}               — hierarchical layout
  *   POST /wp-json/wp-pilot/v1/clone-page                             — clone page as draft
+ *   GET  /wp-json/wp-pilot/v1/files?path=public_html                 — PHP filesystem bridge
  *
  * Security: All endpoints require edit_posts capability (Application Password auth).
  */
@@ -75,6 +76,28 @@ add_action( 'rest_api_init', function() {
         },
         'args' => array(
             'post_id' => array( 'required' => true, 'type' => 'integer' ),
+        ),
+    ) );
+
+    // ═══════════════════════════════════════════════════════
+    // PHP FILESYSTEM BRIDGE (v2 — bypasses cPanel/Imunify360)
+    // ═══════════════════════════════════════════════════════
+
+    // GET — List directory via PHP native filesystem (no cPanel needed)
+    // Paths may be relative (resolved from home dir) or absolute (validated).
+    // Security: restricted to within the hosting account home directory.
+    register_rest_route( 'wp-pilot/v1', '/files', array(
+        'methods'             => 'GET',
+        'callback'            => 'wppilot_list_files',
+        'permission_callback' => function() {
+            return current_user_can( 'edit_posts' );
+        },
+        'args' => array(
+            'path' => array(
+                'required'          => true,
+                'type'              => 'string',
+                'sanitize_callback' => 'sanitize_text_field',
+            ),
         ),
     ) );
 
@@ -348,6 +371,113 @@ function wppilot_build_structure( $elements, $depth = 0 ) {
     }
     return $result;
 }
+
+// ═══════════════════════════════════════════════════════════
+// PHP FILESYSTEM BRIDGE HANDLER (v2)
+// ═══════════════════════════════════════════════════════════
+
+/**
+ * List directory contents using PHP native file system.
+ * Bypasses cPanel UAPI entirely — no IP blocks, no Imunify360.
+ *
+ * Path handling:
+ *   - Relative paths (e.g. "public_html"): resolved from account home dir
+ *   - Absolute paths (e.g. "/home/user/public_html"): used as-is
+ * Security: resolved path must be within the account home directory.
+ */
+function wppilot_list_files( WP_REST_Request $request ) {
+    // Home dir = one level above WordPress install (e.g. /home/user from /home/user/public_html/)
+    $home_dir = dirname( rtrim( ABSPATH, '/\\' ) );
+
+    $requested = $request->get_param( 'path' );
+
+    // Resolve path: relative → prepend home dir; absolute → use as-is
+    if ( ! path_is_absolute( $requested ) ) {
+        $resolved = $home_dir . DIRECTORY_SEPARATOR . ltrim( $requested, '/\\' );
+    } else {
+        $resolved = $requested;
+    }
+
+    // Normalise (resolve symlinks, .. etc.)
+    $real_path = realpath( $resolved );
+    $real_home = realpath( $home_dir );
+
+    if ( $real_path === false || $real_home === false ) {
+        return new WP_Error( 'path_not_found', 'Path does not exist or is not readable.', array( 'status' => 404 ) );
+    }
+
+    // Security guard: disallow traversal outside home directory
+    $home_prefix = $real_home . DIRECTORY_SEPARATOR;
+    if ( $real_path !== $real_home && strpos( $real_path . DIRECTORY_SEPARATOR, $home_prefix ) !== 0 ) {
+        return new WP_Error( 'path_forbidden', 'Access denied: path is outside the account home directory.', array( 'status' => 403 ) );
+    }
+
+    if ( ! is_dir( $real_path ) ) {
+        return new WP_Error( 'not_a_directory', 'The path exists but is not a directory.', array( 'status' => 400 ) );
+    }
+
+    $entries = @scandir( $real_path );
+    if ( $entries === false ) {
+        return new WP_Error( 'read_error', 'Cannot read directory (permission denied).', array( 'status' => 500 ) );
+    }
+
+    $files = array();
+    foreach ( $entries as $entry ) {
+        if ( $entry === '.' || $entry === '..' ) continue;
+
+        $full = $real_path . DIRECTORY_SEPARATOR . $entry;
+
+        // Determine type
+        if ( is_link( $full ) ) {
+            $type = 'link';
+        } elseif ( is_dir( $full ) ) {
+            $type = 'dir';
+        } else {
+            $type = 'file';
+        }
+
+        // Stat for size + mtime (suppress warnings on unreadable entries)
+        $stat  = @stat( $full );
+        $size  = ( $stat !== false ) ? (int) $stat['size']  : 0;
+        $mtime = ( $stat !== false ) ? (int) $stat['mtime'] : 0;
+
+        $files[] = array(
+            'name'      => $entry,
+            'type'      => $type,
+            'size'      => $size,
+            'mtime'     => $mtime,
+            // Always forward-slash in fullpath (matches cPanel convention)
+            'fullpath'  => str_replace( DIRECTORY_SEPARATOR, '/', $full ),
+            'humansize' => wppilot_format_bytes( $size ),
+        );
+    }
+
+    // Directories first, then alphabetical (matches cPanel sort order)
+    usort( $files, function( $a, $b ) {
+        if ( $a['type'] === 'dir' && $b['type'] !== 'dir' ) return -1;
+        if ( $a['type'] !== 'dir' && $b['type'] === 'dir' ) return  1;
+        return strcmp( $a['name'], $b['name'] );
+    } );
+
+    return rest_ensure_response( array(
+        'path'  => str_replace( DIRECTORY_SEPARATOR, '/', $real_path ),
+        'files' => $files,
+    ) );
+}
+
+/** Human-readable file size (matches cPanel humansize format) */
+function wppilot_format_bytes( $bytes ) {
+    if ( $bytes <= 0 ) return '0 B';
+    $units = array( 'B', 'KB', 'MB', 'GB', 'TB' );
+    $i     = (int) floor( log( $bytes, 1024 ) );
+    $i     = min( $i, count( $units ) - 1 );
+    return round( $bytes / pow( 1024, $i ), 1 ) . ' ' . $units[ $i ];
+}
+
+
+// ═══════════════════════════════════════════════════════════
+// EXISTING SHARED HELPERS (unchanged)
+// ═══════════════════════════════════════════════════════════
 
 function wppilot_extract_key_settings( $settings, $el_type ) {
     $design_keys = array(
