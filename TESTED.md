@@ -23,6 +23,23 @@ Playwright MCP automation on localhost:3001
 - Clerk dev mode warning (expected, non-blocking)
 - Zero app-level errors across all tested pages
 
+## Current Issue: AI Brain WP REST API Authentication Failure
+
+### Diagnosis
+
+| # | Hypothesis | Test | Result | Diagnosis |
+|---|-----------|------|--------|-----------|
+| 1 | System prompt missing layers | Intercepted fetch to /api/ai/chat | System prompt includes all 3 layers | ❌ Not the cause |
+| 2 | Credentials not in Convex | Checked prod Convex via system prompt | wpRestConnected=true, fields present | ❌ Not the cause |
+| 3 | Double /wp-json/ in URL | Read wpFetch code + stored wpRestUrl | URL was `.../wp-json/wp-json/...` | ✅ FIXED (7b7c89c) |
+| 4 | Fix not deployed / cached | Deployed with --force, retested | AI still reports auth error | ⚠️ Insufficient |
+| 5 | WP blocking Vercel IPs | Direct curl=200, Vercel function fails | Adding diagnostic logs | 🔍 Investigating |
+| 6 | Convex fetchQuery failure | getWpContext may not find site | Adding console.log | 🔍 Investigating |
+
+**Classification**: Infrastructure / Auth — blocks all WP REST tools in AI Brain
+**Direct curl**: ✅ Works (200 OK with actual page data)
+**Through pipeline**: ❌ Fails ("authentication error")
+
 ## Limitations
 - Cannot test authenticated user flows (sign-in password entry prohibited)
 - Cannot verify data rendering with real site entries (requires auth)
