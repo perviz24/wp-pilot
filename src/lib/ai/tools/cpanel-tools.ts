@@ -33,7 +33,9 @@ async function cpanelFetch(
     headers: {
       Authorization: authHeader,
       "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "text/html",
+      // OpenResty proxy requires Accept containing text/html (else HTTP 415).
+      // Including application/json makes cPanel respond with JSON not HTML.
+      Accept: "application/json,text/html",
     },
     body,
   });
