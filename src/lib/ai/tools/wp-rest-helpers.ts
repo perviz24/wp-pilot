@@ -17,6 +17,16 @@ export async function wpFetch(
   return wpFetchCustom(baseUrl, `/wp/v2${endpoint}`, authHeader, options);
 }
 
+/** Make an authenticated LearnDash REST API v2 call (namespace: ldlms/v2) */
+export async function ldFetch(
+  baseUrl: string,
+  endpoint: string,
+  authHeader: string,
+  options: { method?: string; body?: unknown } = {},
+): Promise<{ ok: boolean; status: number; data: unknown }> {
+  return wpFetchCustom(baseUrl, `/ldlms/v2${endpoint}`, authHeader, options);
+}
+
 /** Make an authenticated WP REST API call with a custom namespace path */
 export async function wpFetchCustom(
   baseUrl: string,
