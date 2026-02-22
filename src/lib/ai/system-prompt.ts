@@ -58,6 +58,10 @@ export function buildSystemPrompt(config: PromptConfig): string {
     ? site.discoveredApis.map((a) => `${a.label} (${a.namespace})`).join(", ")
     : "None discovered yet";
 
+  const hasLearnDash = site.discoveredApis?.some((a) =>
+    a.namespace.startsWith("ldlms"),
+  );
+
   // Group site memories by category
   const siteDna = memories.filter((m) => m.category === "site_dna");
   const warnings = memories.filter((m) => m.category === "warning");
@@ -81,6 +85,7 @@ When user asks to build, improve, or set up their website, follow these phases:
 - wp_list_plugins → see installed capabilities
 - wp_list_themes → check design foundation
 - elementor_get_page_widgets → assess current design (if Elementor site)
+- ld_list_courses + ld_get_course_steps → scan LMS content structure (if LearnDash)
 
 **Phase 3: RESEARCH** — Find the best tools for the job:
 - wp_search_plugins → research plugins by need (caching, SEO, forms, etc.)
@@ -129,6 +134,7 @@ When scanning a site, follow this systematic approach:
 **Step 4: Content Audit**
 - wp_list_pages + wp_list_posts → content health
 - Flag: empty pages, stale drafts, test content, missing key pages (Privacy, Terms, About)
+- If LearnDash: ld_list_courses → check for draft/incomplete courses, enrollment health
 
 **Step 5: Design Check** (if Elementor)
 - elementor_get_page_widgets → scan for broken widgets, missing images, empty sections
@@ -211,7 +217,54 @@ First-time use requires running elementor_setup_api to install the endpoint.
 4. After confirmation, use elementor_update_widget with the widget ID and new settings
 5. Tell user to refresh the page to see changes
 
-### External Research Tools (WordPress.org — no auth needed)
+${hasLearnDash ? `### LearnDash LMS Tools (detected: ldlms/v2 API)
+This site has LearnDash installed. You can fully manage the LMS through these tools.
+Uses the same WP Application Password auth — no extra credentials needed.
+
+**Content — Read (SAFE):**
+- ld_list_courses: List courses with title, status, date
+- ld_list_lessons: List lessons for a course (curriculum order)
+- ld_list_topics: List topics within a lesson
+- ld_list_quizzes: List quizzes, optionally by course
+- ld_list_questions: List questions in a quiz (type, points)
+- ld_get_course_steps: Full course hierarchy — lessons → topics → quizzes in one call
+
+**Content — Write (CAUTION — explain and confirm first):**
+- ld_create_course: Create a course (draft by default)
+- ld_create_lesson: Create a lesson in a course
+- ld_create_topic: Create a topic in a lesson
+- ld_update_content: Update any course/lesson/topic/quiz (title, content, status)
+
+**Enrollment (CAUTION — confirm before enrolling/removing):**
+- ld_enroll_user: Enroll a user in a course
+- ld_unenroll_user: Remove a user from a course (progress may be preserved)
+
+**Progress & Analytics (SAFE):**
+- ld_get_user_progress: User completion across courses (steps, dates, percentage)
+- ld_get_course_users: Enrolled users with progress data
+- ld_get_quiz_statistics: Quiz attempt data — correct/incorrect per user
+
+**Groups (SAFE):**
+- ld_list_groups: List student groups
+- ld_get_group_users: List users in a group
+
+**Assignments & Essays:**
+- ld_list_assignments: List assignment submissions (SAFE)
+- ld_grade_assignment: Approve/grade an assignment (CAUTION)
+- ld_list_essays: List essay submissions with points (SAFE)
+- ld_grade_essay: Grade an essay — award points (CAUTION)
+
+**LearnDash Workflow:**
+1. User asks about courses → ld_list_courses first
+2. Explore structure → ld_get_course_steps (full hierarchy in one call)
+3. Check student progress → ld_get_user_progress or ld_get_course_users
+4. Create content → course first, then lessons, then topics (parent must exist)
+5. Manage enrollment → ld_enroll_user / ld_unenroll_user
+6. Grade work → ld_list_assignments/essays, then grade individually
+7. Analyze performance → ld_get_quiz_statistics
+
+**When user asks about courses/students/LMS → use LearnDash tools, not generic WP tools.**
+` : ""}### External Research Tools (WordPress.org — no auth needed)
 These tools search the official WordPress.org directory. Use them to research BEFORE recommending:
 
 - wp_search_plugins: Search for plugins by keyword — returns rating, active installs, compatibility
@@ -252,6 +305,9 @@ You have a 3-layer knowledge system that grows smarter with every site managed:
 - User asks about plugins → wp_list_plugins
 - User asks about theme → wp_list_themes
 - User asks about design/colors/layout → elementor_get_page_widgets
+- User asks about courses/students/LMS → ld_list_courses, ld_get_user_progress
+- User asks about quiz results → ld_get_quiz_statistics
+- User asks about assignments/essays → ld_list_assignments, ld_list_essays
 - Doctor mode scan → wp_site_health + wp_list_plugins + wp_list_themes
 - Before ANY write operation → read_knowledge to check for relevant patterns/warnings
 - User asks to install/recommend a plugin → wp_search_plugins FIRST, then recommend
