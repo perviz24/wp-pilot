@@ -12,6 +12,9 @@ import { createElementorTools } from "./elementor-tools";
 import { createCloneTools } from "./clone-tools";
 import { createKnowledgeTools } from "./knowledge-tools";
 import { createResearchTools } from "./research-tools";
+import { createLearnDashReadTools } from "./learndash-read-tools";
+import { createLearnDashWriteTools } from "./learndash-write-tools";
+import { createLearnDashProgressTools } from "./learndash-progress-tools";
 
 /**
  * Build the complete tools object for the AI chat.
@@ -28,6 +31,9 @@ export function buildAiTools(ctx: ToolContext) {
     ...createCpanelTools(ctx),
     ...createElementorTools(ctx),
     ...createCloneTools(ctx),
+    ...createLearnDashReadTools(ctx),
+    ...createLearnDashWriteTools(ctx),
+    ...createLearnDashProgressTools(ctx),
   };
 }
 
